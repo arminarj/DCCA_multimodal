@@ -1,10 +1,10 @@
 import numpy as np
-
-
+import torch
+from torch import diag, symeig, mean, dot, eye 
 class linear_cca():
     def __init__(self):
-        self.w = [None, None]
-        self.m = [None, None]
+        self.w = [None, None] 
+        self.m = [None, None] # mean
 
     def fit(self, H1, H2, outdim_size):
         """
@@ -23,36 +23,36 @@ class linear_cca():
         o1 = H1.shape[1]
         o2 = H2.shape[1]
 
-        self.m[0] = np.mean(H1, axis=0)
-        self.m[1] = np.mean(H2, axis=0)
-        H1bar = H1 - np.tile(self.m[0], (m, 1))
-        H2bar = H2 - np.tile(self.m[1], (m, 1))
+        self.m[0] = mean(H1, axis=0)
+        self.m[1] = mean(H2, axis=0)
+        H1bar = H1 - m[0].repeat(m, 1).view(m, -1)
+        H2bar = H2 - m[0].repeat(m, 1).view(m, -1)
 
-        SigmaHat12 = (1.0 / (m - 1)) * np.dot(H1bar.T, H2bar)
-        SigmaHat11 = (1.0 / (m - 1)) * np.dot(H1bar.T,
-                                                 H1bar) + r1 * np.identity(o1)
-        SigmaHat22 = (1.0 / (m - 1)) * np.dot(H2bar.T,
-                                                 H2bar) + r2 * np.identity(o2)
+        SigmaHat12 = (1.0 / (m - 1)) * dot(H1bar.T, H2bar)
+        SigmaHat11 = (1.0 / (m - 1)) * dot(H1bar.T,
+                                                 H1bar) + r1 * eye(o1)
+        SigmaHat22 = (1.0 / (m - 1)) * dot(H2bar.T,
+                                                 H2bar) + r2 * eye(o2)
 
-        [D1, V1] = np.linalg.eigh(SigmaHat11)
-        [D2, V2] = np.linalg.eigh(SigmaHat22)
-        SigmaHat11RootInv = np.dot(
-            np.dot(V1, np.diag(D1 ** -0.5)), V1.T)
-        SigmaHat22RootInv = np.dot(
-            np.dot(V2, np.diag(D2 ** -0.5)), V2.T)
+        [D1, V1] = symeig(SigmaHat11, eigenvectors=True)
+        [D2, V2] = symeig(SigmaHat22, eigenvectors=True)
+        SigmaHat11RootInv = dot(
+            dot(V1, diag(D1 ** -0.5)), V1.T)
+        SigmaHat22RootInv = dot(
+            dot(V2, diag(D2 ** -0.5)), V2.T)
 
-        Tval = np.dot(np.dot(SigmaHat11RootInv,
+        Tval = dot(dot(SigmaHat11RootInv,
                                    SigmaHat12), SigmaHat22RootInv)
 
-        [U, D, V] = np.linalg.svd(Tval)
+        [U, D, V] = Tval.svd()
         V = V.T
-        self.w[0] = np.dot(SigmaHat11RootInv, U[:, 0:outdim_size])
-        self.w[1] = np.dot(SigmaHat22RootInv, V[:, 0:outdim_size])
+        self.w[0] = dot(SigmaHat11RootInv, U[:, 0:outdim_size])
+        self.w[1] = dot(SigmaHat22RootInv, V[:, 0:outdim_size])
         D = D[0:outdim_size]
 
     def _get_result(self, x, idx):
         result = x - self.m[idx].reshape([1, -1]).repeat(len(x), axis=0)
-        result = np.dot(result, self.w[idx])
+        result = dot(result, self.w[idx])
         return result
 
     def test(self, H1, H2):

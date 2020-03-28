@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data.dataset import Dataset
 from torch.utils.data import DataLoader
-from torch.optim.lr_scheduler import ReduceLROnPlateau
+
 import torch.optim as optim
 
 import numpy as np
@@ -28,7 +28,7 @@ from dataset import *
 from solver import Solver
 import argparse
 
-# torch.set_default_tensor_type(torch.float)
+torch.set_default_tensor_type(torch.DoubleTensor)
 
 
 parser = argparse.ArgumentParser(description='MOSEI Sentiment Analysis')
@@ -54,11 +54,11 @@ parser.add_argument('--relu_dropout', type=float, default=0.1,
 
 
 # Tuning
-parser.add_argument('--batch_size', type=int, default=24, metavar='N',
-                    help='batch size (default: 24)')
+parser.add_argument('--batch_size', type=int, default=400, metavar='N',
+                    help='batch size (default: 400)')
 parser.add_argument('--clip', type=float, default=0.8,
                     help='gradient clip value (default: 0.8)')
-parser.add_argument('--lr', type=float, default=1e-3,
+parser.add_argument('--lr', type=float, default=1e-8,
                     help='initial learning rate (default: 1e-3)')
 parser.add_argument('--optim', type=str, default='Adam',
                     help='optimizer to use (default: Adam)')
@@ -66,9 +66,9 @@ parser.add_argument('--num_epochs', type=int, default=10,
                     help='number of epochs (default: 10)')
 parser.add_argument('--when', type=int, default=20,
                     help='when to decay learning rate (default: 20)')
-parser.add_argument('--batch_chunk', type=int, default=1,
+parser.add_argument('--batch_chunk', type=int, default=50,
                     help='number of chunks per batch (default: 1)')
-parser.add_argument('--reg_par', type=float, default=1e-5,
+parser.add_argument('--reg_par', type=float, default=1e-9,
                     help='the regularization parameter of the network')
 # Logistics
 parser.add_argument('--log_interval', type=int, default=30,
@@ -79,6 +79,8 @@ parser.add_argument('--no_cuda', action='store_true',
                     help='do not use cuda')
 parser.add_argument('--name', type=str, default='cca',
                     help='name of the trial (default: "cca")')
+parser.add_argument('--nlevels', type=int, default=3,
+                    help='n hidden layer')
 args = parser.parse_args()
 
 
@@ -117,8 +119,8 @@ valid_data = get_data(args, dataset, 'valid')
 test_data = get_data(args, dataset, 'test')
    
 train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True)
-valid_loader = DataLoader(valid_data, batch_size=args.batch_size, shuffle=True)
-test_loader = DataLoader(test_data, batch_size=args.batch_size, shuffle=True)
+valid_loader = DataLoader(valid_data, batch_size=args.batch_size, shuffle=False)
+test_loader = DataLoader(test_data, batch_size=args.batch_size, shuffle=False)
 
 print('Finish loading the data....')
 if not args.aligned:
@@ -133,7 +135,7 @@ if not args.aligned:
 hyp_params = args
 hyp_params.orig_d_l, hyp_params.orig_d_a, hyp_params.orig_d_v = train_data.get_dim()
 hyp_params.l_len, hyp_params.a_len, hyp_params.v_len = train_data.get_seq_len()
-# hyp_params.layers = args.nlevels
+hyp_params.layers = args.nlevels
 hyp_params.use_cuda = use_cuda
 hyp_params.dataset = dataset
 hyp_params.when = args.when
@@ -153,15 +155,16 @@ if __name__ == '__main__':
     save_to = './new_features.gz'
 
     # the size of the new space learned by the model (number of the new features)
-    outdim_size = 100
+    outdim_size = 2
 
     # size of the input for view 1 and view 2
     input_shape1 = 300
     input_shape2 = 74
 
     # number of layers with nodes in each one
-    layer_sizes1 = [1024, 1024, 1024, outdim_size]
-    layer_sizes2 = [1024, 1024, 1024, outdim_size]
+    layer_size = [1024]* (hyp_params.layers-1)
+    layer_sizes1 = layer_size + [outdim_size]
+    layer_sizes2 = layer_size + [outdim_size]
 
     # the parameters for training the network
 
@@ -184,12 +187,11 @@ if __name__ == '__main__':
     # Building, training, and producing the new features by DCCA
     model = DeepCCA(layer_sizes1, layer_sizes2, input_shape1,
                     input_shape2, outdim_size, use_all_singular_values, device=hyp_params.device)
-    optimizer = getattr(optim, hyp_params.optim)(model.parameters(), lr=hyp_params.lr)
-    scheduler = ReduceLROnPlateau(optimizer, mode='min', patience=hyp_params.when, factor=0.1, verbose=True)
+    # optimizer = getattr(optim, hyp_params.optim)(model.parameters(), lr=hyp_params.lr)
     l_cca = None
     if apply_linear_cca:
         l_cca = linear_cca()
-    solver = Solver(model, l_cca, outdim_size, scheduler, hyp_params)
+    solver = Solver(model, l_cca, outdim_size, hyp_params)
 
     # train1, train2 = train_data_text, train_data_audio
     # val1, val2 = valid_data_text, valid_data_audio
