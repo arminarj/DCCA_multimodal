@@ -6,8 +6,7 @@ class cca_loss():
         self.outdim_size = outdim_size
         self.use_all_singular_values = use_all_singular_values
         self.device = device
-        # print(device)
-
+ 
     def loss(self, H1, H2):
         """
 
@@ -83,7 +82,7 @@ class cca_loss():
                 Tval.t(), Tval), eigenvectors=True)
             # assert torch.isnan(V).item() == 0
             # U = U[torch.gt(U, eps).nonzero()[:, 0]]
-            U = U * torch.ge(U, eps)
+            U = torch.where(U>eps, U, torch.ones(U.shape).double()*eps)
             U = U.topk(self.outdim_size)[0]
             # print(f'U : {U}')
             corr = torch.sum(torch.sqrt(U))

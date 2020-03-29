@@ -9,7 +9,7 @@ import numpy as np
 from linear_cca import linear_cca
 from torch.utils.data import BatchSampler, SequentialSampler, RandomSampler
 from DeepCCAModels import DeepCCA
-from utils import load_data, svm_classify
+from utils import *
 import time
 import logging
 try:
@@ -66,7 +66,7 @@ parser.add_argument('--num_epochs', type=int, default=10,
                     help='number of epochs (default: 10)')
 parser.add_argument('--when', type=int, default=20,
                     help='when to decay learning rate (default: 20)')
-parser.add_argument('--batch_chunk', type=int, default=50,
+parser.add_argument('--batch_chunk', type=int, default=24,
                     help='number of chunks per batch (default: 1)')
 parser.add_argument('--reg_par', type=float, default=1e-9,
                     help='the regularization parameter of the network')
@@ -143,7 +143,7 @@ hyp_params.batch_chunk = args.batch_chunk
 hyp_params.n_train, hyp_params.n_valid, hyp_params.n_test = len(train_data), len(valid_data), len(test_data)
 hyp_params.model = str.upper(args.model.strip())
 hyp_params.output_dim = output_dim_dict.get(dataset, 1)
-hyp_params.criterion = criterion_dict.get(dataset, 'NLLoss')
+# hyp_params.criterion = criterion_dict.get(dataset, 'NLLoss')
 hyp_params.device = 'cuda' if use_cuda else 'cpu'
 
 

@@ -5,20 +5,6 @@ import numpy as np
 import torch
 
 
-def load_data(data_file):
-    """loads the data from the gzip pickled files, and converts to numpy arrays"""
-    print('loading data ...')
-    f = gzip.open(data_file, 'rb')
-    train_set, valid_set, test_set = load_pickle(f)
-    f.close()
-
-    train_set_x, train_set_y = make_tensor(train_set)
-    valid_set_x, valid_set_y = make_tensor(valid_set)
-    test_set_x, test_set_y = make_tensor(test_set)
-
-    return [(train_set_x, train_set_y), (valid_set_x, valid_set_y), (test_set_x, test_set_y)]
-
-
 def make_tensor(data_xy):
     """converts the input to numpy arrays"""
     data_x, data_y = data_xy
@@ -64,3 +50,22 @@ def load_pickle(f):
         ret = thepickle.load(f)
 
     return ret
+
+def save_load_name(args, name=''):
+    if args.aligned:
+        name = name if len(name) > 0 else 'aligned_model'
+    elif not args.aligned:
+        name = name if len(name) > 0 else 'nonaligned_model'
+
+    return name + '_' + args.model
+
+
+def save_model(args, model, name=''):
+    name = save_load_name(args, name)
+    torch.save(model, f'pre_trained_models/{name}.pt')
+
+
+def load_model(args, name=''):
+    name = save_load_name(args, name)
+    model = torch.load(f'pre_trained_models/{name}.pt')
+    return model
