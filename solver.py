@@ -90,6 +90,8 @@ class Solver():
                 save_model(self.hyp_params, self.model, name=name)
                 print(f"Saved model at pre_trained_models/{name}.pt")
                 best_valid = val_loss
+        self.model = load_model(hyp_params, name=hyp_params.name)
+        
 
         ####################################
         ###### functions defenition #######

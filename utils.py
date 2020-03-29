@@ -13,14 +13,14 @@ def make_tensor(data_xy):
     return data_x, data_y
 
 
-def svm_classify(data, C):
+def svm_classify(train_output, valid_output, test_output, C=0.01):
     """
     trains a linear SVM on the data
     input C specifies the penalty factor of SVM
     """
-    train_data, _, train_label = data[0]
-    valid_data, _, valid_label = data[1]
-    test_data, _, test_label = data[2]
+    train_data = train_output.cpu().numpy() 
+    valid_data = valid_output.cpu().numpy() 
+    test_data = test_output.cpu().numpy()  
 
     print('training SVM...')
     clf = svm.LinearSVC(C=C, dual=False)
@@ -31,7 +31,7 @@ def svm_classify(data, C):
     p = clf.predict(valid_data)
     valid_acc = accuracy_score(valid_label, p)
 
-    return [test_acc, valid_acc]
+    return clf, [test_acc, valid_acc]
 
 
 def load_pickle(f):

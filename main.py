@@ -152,7 +152,7 @@ if __name__ == '__main__':
     # Parameters Section
 
     # the path to save the final learned features
-    save_to = './new_features.gz'
+    save_to = './SVM_CLF.gz'
 
     # the size of the new space learned by the model (number of the new features)
     outdim_size = 2
@@ -204,24 +204,17 @@ if __name__ == '__main__':
     #             len(train1),
     #             len(train1)+ len(val1),
     #             len(train1) + len(val1) + len(test1)]
-    # loss, outputs = solver.test(apply_linear_cca)
+    loss_train, outputs_train = solver.test(apply_linear_cca, loader=train_loader)
+    loss_valid, outputs_valid = solver.test(apply_linear_cca, loader=valid_loader)
+    loss_test, outputs_test = solver.test(apply_linear_cca, loader=test_loader)
 
-    # new_data = []
-    # # print(outputs)
-    # for idx in range(3):
-    #     new_data.append([outputs[0][set_size[idx]:set_size[idx + 1], :],
-    #                      outputs[1][set_size[idx]:set_size[idx + 1], :],
-    #                      data1[idx][1]])
 
     # # Training and testing of SVM with linear kernel on the view 1 with new features
-    # [test_acc, valid_acc] = svm_classify(new_data, C=0.01)
-    # print("Accuracy on view 1 (validation data) is:", valid_acc * 100.0)
-    # print("Accuracy on view 1 (test data) is:", test_acc*100.0)
-    # # Saving new features in a gzip pickled file specified by save_to
-    # print('saving new features ...')
-    # f1 = gzip.open(save_to, 'wb')
-    # thepickle.dump(new_data, f1)
-    # f1.close()
-    # d = torch.load('checkpoint.model')
-    # solver.model.load_state_dict(d)
-    # solver.model.parameters()
+    svm_clf, [test_acc, valid_acc] = svm_classify(new_data, C=0.01)
+
+    print("Accuracy on view 1 (validation data) is:", valid_acc * 100.0)
+    print("Accuracy on view 1 (test data) is:", test_acc*100.0)
+    # Saving new features in a gzip pickled file specified by save_to
+    print('saving new features ...')
+    s = thepickle.dumps(svm_clf, open(save_to, 'wb'))
+
