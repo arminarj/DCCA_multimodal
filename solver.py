@@ -3,6 +3,7 @@ import torch.nn as nn
 from torch.utils.data.dataset import Dataset
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.utils.tensorboard import SummaryWriter
 
 from linear_cca import linear_cca
 from torch.utils.data import BatchSampler, SequentialSampler, RandomSampler
@@ -59,6 +60,8 @@ class Solver():
 
         self.logger.info(self.model)
         self.logger.info(self.optimizer)
+        self.writer = SummaryWriter()
+        self.epoch = -1
 
     def fit(self, train_loader, valid_loader, test_loader, checkpoint='checkpoint.model'):
         """
@@ -72,6 +75,7 @@ class Solver():
         self.valid_loader = valid_loader
         best_valid = 1e+08
         for epoch in range(1, self.epoch_num+1):
+            self.epoch = epoch
             start = time.time()
             self.train(epoch)
             val_loss, _ = self.test(False)
@@ -86,11 +90,13 @@ class Solver():
             print("-"*50)
 
             if val_loss < best_valid:
-                name = 'DCCA_AL'
+                name = self.hyp_params.name
                 save_model(self.hyp_params, self.model, name=name)
                 print(f"Saved model at pre_trained_models/{name}.pt")
                 best_valid = val_loss
-        self.model = load_model(hyp_params, name=hyp_params.name)
+        
+        self.writer.close()
+        self.model = load_model(self.hyp_params, name=self.hyp_params.name)
         
 
         ####################################
@@ -123,22 +129,26 @@ class Solver():
         
             if batch_chunk > 1:
                 raw_loss = combined_loss = 0
-                text_chunks = text.chunk(batch_chunk, dim=0)
-                audio_chunks = audio.chunk(batch_chunk, dim=0)
-                # vision_chunks = vision.chunk(batch_chunk, dim=0)
-                # eval_attr_chunks = eval_attr.chunk(batch_chunk, dim=0)
-                
-                for i in range(batch_chunk):
-                    text_i, audio_i = text_chunks[i], audio_chunks[i]
-                    o1, o2 = net(text_i, audio_i)
-                    o1, o2 = o1.squeeze(), o2.squeeze()
-                    raw_loss_i = criterion(o1, o2)
-                    raw_loss += raw_loss_i
-                    raw_loss_i.backward()
+                text_i, audio_i = text, audio
+                o1, o2 = net(text_i, audio_i)
+                o1, o2 = o1.squeeze(), o2.squeeze()
+                raw_loss_i = criterion(o1, o2)
+                raw_loss += raw_loss_i
+                raw_loss_i.backward()
                 raw_loss = raw_loss 
-                combined_loss = raw_loss 
+                combined_loss = raw_loss
+                if i_batch % self.log_interval == 0 and i_batch > 0:
+                    out1 = o1
+                    out2 = o2
+                    self.writer.add_embedding(
+                            out1,
+                            metadata=eval_attr.data,
+                            global_step=self.epoch)
+                    self.writer.add_embedding(
+                            out2,
+                            metadata=eval_attr.data,
+                            global_step=self.epoch)
             else:
-
                 o1, o2 = net(text, audio)
                 raw_loss = self.loss(o1, o2)
                 combined_loss = raw_loss 
@@ -158,12 +168,14 @@ class Solver():
                     format(epoch, i_batch, num_batches, elapsed_time * 1000 / self.hyp_params.log_interval, avg_loss))
                 proc_loss, proc_size = 0, 0
                 start_time = time.time()
+                self.writer.add_scalar('Loss/train', epoch_loss, self.epoch)
+                self.writer.add_graph(self.model, (text, audio))
         if self.linear_cca is not None:
             print(f'Start linear CCA Training...')
             _, outputs = self.test(loader=self.train_loader)
             self.train_linear_cca(outputs[0], outputs[1])
             print(f'End linear CCA Training...')
-                
+                 
         return epoch_loss / self.hyp_params.n_train
 
     def evaluate(self, test=False, _loader=None):
@@ -187,23 +199,13 @@ class Solver():
 
                 if batch_chunk > 1:
                     raw_loss = combined_loss = 0
-                    text_chunks = text.chunk(batch_chunk, dim=0)
-                    audio_chunks = audio.chunk(batch_chunk, dim=0)
-                    # vision_chunks = vision.chunk(batch_chunk, dim=0)
-                    
-                    for i in range(batch_chunk):
-                        text_i, audio_i = text_chunks[i], audio_chunks[i]
-                        # if i is 0:
-                            # print (f'text, audio max : {text_i.max()}, {audio_i.max()}')
-                            # print (f'text, audio min : {text_i.min()}, {audio_i.min()}') 
-                        o1, o2 = net(text_i, audio_i)
-                        o1, o2 = o1.squeeze(), o2.squeeze()
-                        output1.append(o1)
-                        output2.append(o2)
-                        raw_loss_i = criterion(o1, o2)
-                        # print(f'raw loss : {raw_loss_i}')
-                        raw_loss += raw_loss_i
-                        total_loss += criterion(o1, o2).item() * batch_chunk
+                    o1, o2 = net(text, audio)
+                    o1, o2 = o1.squeeze(), o2.squeeze()
+                    output1.append(o1)
+                    output2.append(o2)
+                    raw_loss_i = criterion(o1, o2)
+                    raw_loss += raw_loss_i
+                    total_loss += criterion(o1, o2).item()
                     losses.append(total_loss)
                 else:
                     o1, o2 = net(text, audio)
@@ -215,7 +217,13 @@ class Solver():
                 
             outputs = [torch.cat(output1, dim=0),
                         torch.cat(output2, dim=0)]
-            losses = torch.tensor(losses).double() 
+            losses = torch.tensor(losses).double()
+        if loader is self.train_loader:
+            loss_name="train_eval"
+        elif test:
+            loss_name='test_eval'
+        else : loss_name ='valid_eval'
+        self.writer.add_scalar(f'Loss/{loss_name}', losses.mean(), self.epoch)
         return losses, outputs
 
     def test(self, test=False, loader=None):

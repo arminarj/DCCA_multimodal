@@ -149,17 +149,12 @@ hyp_params.device = 'cuda' if use_cuda else 'cpu'
 
 if __name__ == '__main__':
     ############
-    # Parameters Section
-
-    # the path to save the final learned features
-    save_to = './SVM_CLF.gz'
-
     # the size of the new space learned by the model (number of the new features)
-    outdim_size = 2
+    outdim_size = 100
 
     # size of the input for view 1 and view 2
-    input_shape1 = 300
-    input_shape2 = 74
+    input_shape1 = 300*50
+    input_shape2 = 74*50
 
     # number of layers with nodes in each one
     layer_size = [1024]* (hyp_params.layers-1)
@@ -171,8 +166,7 @@ if __name__ == '__main__':
 
     # the regularization parameter of the network
     # seems necessary to avoid the gradient exploding especially when non-saturating activations are used
-    # reg_par = 1e-5
-
+ 
     # specifies if all the singular values should get used to calculate the correlation or just the top outdim_size ones
     # if one option does not work for a network or dataset, try the other one
     use_all_singular_values = False
@@ -187,34 +181,11 @@ if __name__ == '__main__':
     # Building, training, and producing the new features by DCCA
     model = DeepCCA(layer_sizes1, layer_sizes2, input_shape1,
                     input_shape2, outdim_size, use_all_singular_values, device=hyp_params.device)
-    # optimizer = getattr(optim, hyp_params.optim)(model.parameters(), lr=hyp_params.lr)
+
     l_cca = None
     if apply_linear_cca:
         l_cca = linear_cca()
     solver = Solver(model, l_cca, outdim_size, hyp_params)
 
-    # train1, train2 = train_data_text, train_data_audio
-    # val1, val2 = valid_data_text, valid_data_audio
-    # test1, test2 = test_data_text, test_data_audio
-
     solver.fit(train_loader, valid_loader, test_loader)
-    # TODO: Save l_cca model if needed
-
-    # set_size = [0,
-    #             len(train1),
-    #             len(train1)+ len(val1),
-    #             len(train1) + len(val1) + len(test1)]
-    loss_train, outputs_train = solver.test(apply_linear_cca, loader=train_loader)
-    loss_valid, outputs_valid = solver.test(apply_linear_cca, loader=valid_loader)
-    loss_test, outputs_test = solver.test(apply_linear_cca, loader=test_loader)
-
-
-    # # Training and testing of SVM with linear kernel on the view 1 with new features
-    svm_clf, [test_acc, valid_acc] = svm_classify(new_data, C=0.01)
-
-    print("Accuracy on view 1 (validation data) is:", valid_acc * 100.0)
-    print("Accuracy on view 1 (test data) is:", test_acc*100.0)
-    # Saving new features in a gzip pickled file specified by save_to
-    print('saving new features ...')
-    s = thepickle.dumps(svm_clf, open(save_to, 'wb'))
 

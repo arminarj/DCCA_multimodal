@@ -13,14 +13,28 @@ def make_tensor(data_xy):
     return data_x, data_y
 
 
-def svm_classify(train_output, valid_output, test_output, C=0.01):
+def svm_classify(outputs, labels, C=0.01):
     """
     trains a linear SVM on the data
     input C specifies the penalty factor of SVM
     """
+    train_output = outputs[0][0]
+    valid_output = outputs[1][0] 
+    test_output  = outputs[2][0]
+    
+    train_label = labels[0].cpu().numpy() 
+    valid_label = labels[1].cpu().numpy()  
+    test_label  = labels[2].cpu().numpy()
+    print(f'train_label shape : {train_label.shape}')
+    print(f'valid_label shape : {valid_label.shape}')
+    print(f'test_label shape : {test_label.shape}')
+
     train_data = train_output.cpu().numpy() 
     valid_data = valid_output.cpu().numpy() 
     test_data = test_output.cpu().numpy()  
+    print(f'train_data shape : {train_data.shape}')
+    print(f'valid_data shape : {valid_data.shape}')
+    print(f'test_data shape : {test_data.shape}')
 
     print('training SVM...')
     clf = svm.LinearSVC(C=C, dual=False)

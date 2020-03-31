@@ -7,6 +7,7 @@ from objectives import cca_loss
 class MlpNet(nn.Module):
     def __init__(self, layer_sizes, input_size):
         super(MlpNet, self).__init__()
+        self.input_size = input_size ## flatting the data.
         layers = []
         layer_sizes = [input_size] + layer_sizes
         for l_id in range(len(layer_sizes) - 1):
@@ -22,6 +23,7 @@ class MlpNet(nn.Module):
         self.layers = nn.ModuleList(layers)
 
     def forward(self, x):
+        x = x.view(-1, self.input_size)
         for layer in self.layers:
             x = layer(x)
         return x
@@ -38,7 +40,7 @@ class DeepCCA(nn.Module):
     def forward(self, x1, x2):
         """
 
-        x1, x2 are the vectors needs to be make correlated
+        x1, x2 are the Matrix needs to be make correlated X.shape= seq x features
         dim=[batch_size, feats]
 
         """
