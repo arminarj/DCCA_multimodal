@@ -3,7 +3,7 @@ import torch.nn as nn
 from torch.utils.data.dataset import Dataset
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from torch.utils.tensorboard import SummaryWriter
+from tensorboardX import SummaryWriter
 
 from linear_cca import linear_cca
 from torch.utils.data import BatchSampler, SequentialSampler, RandomSampler
@@ -137,17 +137,7 @@ class Solver():
                 raw_loss_i.backward()
                 raw_loss = raw_loss 
                 combined_loss = raw_loss
-                if i_batch % self.log_interval == 0 and i_batch > 0:
-                    out1 = o1
-                    out2 = o2
-                    self.writer.add_embedding(
-                            out1,
-                            metadata=eval_attr.data,
-                            global_step=self.epoch)
-                    self.writer.add_embedding(
-                            out2,
-                            metadata=eval_attr.data,
-                            global_step=self.epoch)
+
             else:
                 o1, o2 = net(text, audio)
                 raw_loss = self.loss(o1, o2)
@@ -168,14 +158,17 @@ class Solver():
                     format(epoch, i_batch, num_batches, elapsed_time * 1000 / self.hyp_params.log_interval, avg_loss))
                 proc_loss, proc_size = 0, 0
                 start_time = time.time()
-                self.writer.add_scalar('Loss/train', epoch_loss, self.epoch)
+                # self.writer.add_scalar('Loss/train', epoch_loss.cpu().numpy() / self.hyp_params.n_train, self.epoch)
                 self.writer.add_graph(self.model, (text, audio))
         if self.linear_cca is not None:
             print(f'Start linear CCA Training...')
             _, outputs = self.test(loader=self.train_loader)
             self.train_linear_cca(outputs[0], outputs[1])
             print(f'End linear CCA Training...')
-                 
+        for name, param in self.model.model1.named_parameters():
+            self.writer.add_histogram(name, param.clone().cpu().data.numpy(), self.epoch)
+        for name, param in self.model.model1.named_parameters():
+            self.writer.add_histogram(name, param.clone().cpu().data.numpy(), self.epoch)
         return epoch_loss / self.hyp_params.n_train
 
     def evaluate(self, test=False, _loader=None):
@@ -191,12 +184,13 @@ class Solver():
 
         net = model
         output1, output2, losses = [], [], []
+        labels = []
         with torch.no_grad():
             for i_batch, (batch_X, batch_Y, batch_META) in enumerate(loader):
                 _, text, audio, _ = batch_X
                 text, audio = text.to(self.device).double(), audio.to(self.device).double()
                 batch_chunk = text.size(0)
-
+                eval_attr = batch_Y.squeeze(-1)
                 if batch_chunk > 1:
                     raw_loss = combined_loss = 0
                     o1, o2 = net(text, audio)
@@ -207,6 +201,11 @@ class Solver():
                     raw_loss += raw_loss_i
                     total_loss += criterion(o1, o2).item()
                     losses.append(total_loss)
+                    labels.append(eval_attr)
+                    # if i_batch % self.log_interval == 0 and i_batch > 0:
+                    #     out = torch.cat([o1, o2], dim=-1)
+
+
                 else:
                     o1, o2 = net(text, audio)
                     output1.append(o1)
@@ -214,15 +213,28 @@ class Solver():
                     raw_loss = self.loss(o1, o2)
                     combined_loss = raw_loss
                     losses.append(total_loss) 
-                
+            
+            labels = torch.cat(labels, dim=0)
             outputs = [torch.cat(output1, dim=0),
                         torch.cat(output2, dim=0)]
             losses = torch.tensor(losses).double()
+            
         if loader is self.train_loader:
             loss_name="train_eval"
         elif test:
             loss_name='test_eval'
         else : loss_name ='valid_eval'
+        mat = np.concatenate([
+                outputs[0].cpu().numpy(),
+                outputs[1].cpu().numpy(),
+            ], axis=1)
+        labels = np.concatenate([labels.data,labels.data], axis=1)
+        self.writer.add_embedding(mat,
+                                metadata=labels,
+                                global_step=self.epoch
+                                # tag=["text", "audio"]
+                                )
+
         self.writer.add_scalar(f'Loss/{loss_name}', losses.mean(), self.epoch)
         return losses, outputs
 
