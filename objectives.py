@@ -1,5 +1,5 @@
 import torch
-
+from linear_cca import linear_gcca
 
 class cca_loss():
     def __init__(self, outdim_size, use_all_singular_values, device):
@@ -88,3 +88,62 @@ class cca_loss():
             corr = torch.sum(torch.sqrt(U))
             assert torch.isnan(corr).item() == 0
         return -corr
+
+class gcca_loss():
+
+    def __init__(self, outdim_size, F, k, V=3, device='cpu', verbos=True, backend='pytorch'):
+        self.outdim_size = outdim_size
+        self.device = device
+        self.F = F
+        self.k = k
+        self.V = 3
+        self.backend = backend
+        self.gccaModule = linear_gcca(self.V,
+                                        self.F,
+                                        self.k,
+                                        verbose=verbos,
+                                        backend=backend,
+                                        device=device) 
+
+    def loss_torch(self, outputs):
+        '''
+        output : list of NN outputs as [f(Xj)]
+        '''
+        self.fit(outputs)
+        print('pytorch fitting is done')
+        G, Us = self.gccaModule.G, self.gccaModule.U
+        # print(G)
+        grads = []
+        for Uval, output in zip(Us, outputs):
+            output = output.double()
+            Ushared = Uval.double()
+            grad = ( G - output.mm(Uval) ).mm(Uval.T)
+            grads.append(grad)
+        self.Us = Us
+        totall_loss = self.gccaModule 
+        return grads 
+
+    def loss_np(self, outputs):
+        '''
+        output : list of NN outputs as [f(Xj)]
+        '''
+        self.fit(outputs)
+        G, Us = self.gccaModule.G, self.gccaModule.U
+        grads = []
+        for Uval, output in zip(Us, outputs):
+            output = output.numpy()
+            Ushared = Uval
+            grad = ( G - output.dot(Uval) ).dot(Uval.T)
+            grads.append(grad)
+        self.Us = Us 
+        return grads
+
+    def loss(self, outputs):
+        if self.backend is 'pytorch':
+            return self.loss_torch(outputs)
+        else: return self.loss_np(outputs)
+
+    def fit(self, outputs):
+        self.gccaModule.fit(outputs)
+
+

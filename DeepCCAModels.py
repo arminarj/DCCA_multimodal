@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
 import numpy as np
-from objectives import cca_loss
+from objectives import cca_loss, gcca_loss
+from linear_cca import linear_gcca
 
 
 class MlpNet(nn.Module):
@@ -49,3 +50,27 @@ class DeepCCA(nn.Module):
         output2 = self.model2(x2)
 
         return output1, output2
+
+class DGCCA(nn.Module):
+    def __init__(self, layer_sizes, input_sizes, outdim_size, use_all_singular_values, device='cpu', verbos=True, backend='pytorch'):
+        super(DGCCA, self).__init__()
+        self.model1 = MlpNet(layer_sizes[0], input_sizes[0]).double()
+        self.model2 = MlpNet(layer_sizes[1], input_sizes[1]).double()
+        self.model3 = MlpNet(layer_sizes[2], input_sizes[2]).double()
+
+        F = [outdim_size for _ in layer_sizes]
+        
+        self.cca_model = gcca_loss(outdim_size, F, k=100, device=device, verbos=verbos, backend=backend)
+        self.loss = self.cca_model.loss
+
+    def train(self, x1, x2, x3):
+        """
+        x1 : text
+        x2 : audio
+        x3 : visual
+        """
+        x1 = self.model1(x1)
+        x2 = self.model2(x2)
+        x3 = self.model3(x3)
+
+        return [x1, x2, x3]

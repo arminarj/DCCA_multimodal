@@ -6,9 +6,9 @@ from torch.utils.data import DataLoader
 import torch.optim as optim
 
 import numpy as np
-from linear_cca import linear_cca
+from linear_cca import linear_cca, linear_gcca
 from torch.utils.data import BatchSampler, SequentialSampler, RandomSampler
-from DeepCCAModels import DeepCCA
+from DeepCCAModels import DeepCCA, DGCCA
 from utils import *
 import time
 import logging
@@ -58,7 +58,7 @@ parser.add_argument('--batch_size', type=int, default=400, metavar='N',
                     help='batch size (default: 400)')
 parser.add_argument('--clip', type=float, default=0.8,
                     help='gradient clip value (default: 0.8)')
-parser.add_argument('--lr', type=float, default=1e-8,
+parser.add_argument('--lr', type=float, default=1e-5,
                     help='initial learning rate (default: 1e-3)')
 parser.add_argument('--optim', type=str, default='Adam',
                     help='optimizer to use (default: Adam)')
@@ -68,7 +68,7 @@ parser.add_argument('--when', type=int, default=20,
                     help='when to decay learning rate (default: 20)')
 parser.add_argument('--batch_chunk', type=int, default=24,
                     help='number of chunks per batch (default: 1)')
-parser.add_argument('--reg_par', type=float, default=1e-9,
+parser.add_argument('--reg_par', type=float, default=1e-2,
                     help='the regularization parameter of the network')
 # Logistics
 parser.add_argument('--log_interval', type=int, default=30,
@@ -155,14 +155,17 @@ if __name__ == '__main__':
     # size of the input for view 1 and view 2
     input_shape1 = 300*50
     input_shape2 = 74*50
+    input_shape3 = 30*50
+
+    input_shapes = [input_shape1, input_shape2, input_shape3]
 
     # number of layers with nodes in each one
     layer_size = [1024]* (hyp_params.layers-1)
     layer_sizes1 = layer_size + [outdim_size]
     layer_sizes2 = layer_size + [outdim_size]
+    layer_sizes3 = layer_size + [outdim_size]
 
-    # the parameters for training the network
-
+    layer_sizes = [layer_sizes1, layer_sizes2, layer_sizes3]
 
     # the regularization parameter of the network
     # seems necessary to avoid the gradient exploding especially when non-saturating activations are used
@@ -174,17 +177,24 @@ if __name__ == '__main__':
     # if a linear CCA should get applied on the learned features extracted from the networks
     # it does not affect the performance on noisy MNIST significantly
     apply_linear_cca = True
+    dgcca = True 
     # end of parameters section
     ############
 
 
     # Building, training, and producing the new features by DCCA
-    model = DeepCCA(layer_sizes1, layer_sizes2, input_shape1,
-                    input_shape2, outdim_size, use_all_singular_values, device=hyp_params.device)
+    # model = DeepCCA(layer_sizes1, layer_sizes2, input_shape1,
+    #                 input_shape2, outdim_size, use_all_singular_values, device=hyp_params.device)
+
+    model = DGCCA(layer_sizes, input_shapes, outdim_size,
+                        use_all_singular_values, device=hyp_params.device)
 
     l_cca = None
     if apply_linear_cca:
-        l_cca = linear_cca()
+        if not dgcca:
+            l_cca = linear_cca()
+        else : l_cca = linear_gcca() 
+
     solver = Solver(model, l_cca, outdim_size, hyp_params)
 
     solver.fit(train_loader, valid_loader, test_loader)

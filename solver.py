@@ -5,7 +5,7 @@ from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from tensorboardX import SummaryWriter
 
-from linear_cca import linear_cca
+from linear_cca import linear_cca, linear_gcca
 from torch.utils.data import BatchSampler, SequentialSampler, RandomSampler
 from DeepCCAModels import DeepCCA
 from utils import *
@@ -21,7 +21,7 @@ import os
 import time
 
 from dataset import *
-
+import torch.optim as optim
 
 class Solver():
     def __init__(self, model, linear_cca, outdim_size, hyp_params):
@@ -30,9 +30,9 @@ class Solver():
         self.model.to(hyp_params.device)
         self.epoch_num = hyp_params.num_epochs
         self.batch_size = hyp_params.batch_size
-        self.batch_chunk = hyp_params.batch_size
+        self.batch_chunk = 50
         self.loss = model.loss
-        self.optimizer = torch.optim.RMSprop(
+        self.optimizer = getattr(optim, hyp_params.optim)(
             self.model.parameters(), lr=hyp_params.lr, weight_decay=hyp_params.reg_par)
         self.device = hyp_params.device
         self.schedule = ReduceLROnPlateau(self.optimizer, mode='min', patience=hyp_params.when,
@@ -120,7 +120,7 @@ class Solver():
             
             model.zero_grad()
 
-            text, audio = text.to(self.device).double(), audio.to(self.device).double()
+            text, audio, vision = text.to(self.device).double(), audio.to(self.device).double(), vision.to(self.device).double()
             batch_chunk = text.size(0)
                 
             combined_loss = 0
@@ -129,10 +129,11 @@ class Solver():
         
             if batch_chunk > 1:
                 raw_loss = combined_loss = 0
-                text_i, audio_i = text, audio
-                o1, o2 = net(text_i, audio_i)
-                o1, o2 = o1.squeeze(), o2.squeeze()
-                raw_loss_i = criterion(o1, o2)
+                text_i, audio_i, vision_i = text, audio, vision
+                outputs = net(text_i, audio_i, vision_i)
+                raw_loss_i = criterion(outputs)
+                for loss in raw_loss_i:
+                    loss.backward()
                 raw_loss += raw_loss_i
                 raw_loss_i.backward()
                 raw_loss = raw_loss 
