@@ -63,7 +63,7 @@ class DGCCA(nn.Module):
         self.cca_model = gcca_loss(outdim_size, F, k=100, device=device, verbos=verbos, backend=backend)
         self.loss = self.cca_model.loss
 
-    def train(self, x1, x2, x3):
+    def forward(self, x1, x2, x3):
         """
         x1 : text
         x2 : audio

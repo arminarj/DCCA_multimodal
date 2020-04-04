@@ -131,7 +131,6 @@ class gcca_loss():
         G, Us = self.gccaModule.G, self.gccaModule.U
         grads = []
         for Uval, output in zip(Us, outputs):
-            output = output.numpy()
             Ushared = Uval
             grad = ( G - output.dot(Uval) ).dot(Uval.T)
             grads.append(grad)

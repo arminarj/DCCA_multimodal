@@ -101,9 +101,9 @@ class linear_gcca():
         self.mean = []
         for index, view in enumerate(views):
             m = view.shape[0]
-            mean = numpy.mean(H1, axis=0)
+            mean = np.mean(view, axis=0)
             self.mean.append(mean)
-            view = view - numpy.tile(mean, (m, 1))
+            view = view - np.tile(mean, (m, 1))
 
         # K ignores those views we have no data for.  If it is not provided,
         # then we use all views for all examples.  All we need to know is
@@ -147,11 +147,11 @@ class linear_gcca():
             
             S_thin = S[:self.truncParam]
             
-            S2_inv = 1. / (np.iply( S_thin, S_thin ) + eps)
+            S2_inv = 1. / (np.multiply( S_thin, S_thin ) + eps)
             
             T = np.diag(
                     np.sqrt(
-                    np.iply( np.iply( S_thin, S2_inv ), S_thin )
+                    np.multiply( np.multiply( S_thin, S2_inv ), S_thin )
                     )
                 )
             

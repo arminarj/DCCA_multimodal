@@ -54,7 +54,7 @@ parser.add_argument('--relu_dropout', type=float, default=0.1,
 
 
 # Tuning
-parser.add_argument('--batch_size', type=int, default=400, metavar='N',
+parser.add_argument('--batch_size', type=int, default=24, metavar='N',
                     help='batch size (default: 400)')
 parser.add_argument('--clip', type=float, default=0.8,
                     help='gradient clip value (default: 0.8)')
@@ -155,7 +155,7 @@ if __name__ == '__main__':
     # size of the input for view 1 and view 2
     input_shape1 = 300*50
     input_shape2 = 74*50
-    input_shape3 = 30*50
+    input_shape3 = 35*50
 
     input_shapes = [input_shape1, input_shape2, input_shape3]
 
@@ -177,7 +177,13 @@ if __name__ == '__main__':
     # if a linear CCA should get applied on the learned features extracted from the networks
     # it does not affect the performance on noisy MNIST significantly
     apply_linear_cca = True
-    dgcca = True 
+    dgcca = True
+    l_cca = None
+    if apply_linear_cca:
+        if not dgcca:
+            l_cca = linear_cca
+        else :
+            l_cca = linear_gcca
     # end of parameters section
     ############
 
@@ -188,12 +194,6 @@ if __name__ == '__main__':
 
     model = DGCCA(layer_sizes, input_shapes, outdim_size,
                         use_all_singular_values, device=hyp_params.device)
-
-    l_cca = None
-    if apply_linear_cca:
-        if not dgcca:
-            l_cca = linear_cca()
-        else : l_cca = linear_gcca() 
 
     solver = Solver(model, l_cca, outdim_size, hyp_params)
 
