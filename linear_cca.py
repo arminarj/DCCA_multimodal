@@ -6,7 +6,7 @@ class linear_cca():
         self.w = [None, None] 
         self.m = [None, None] # mean
 
-    def fit(self, H1, H2, outdim_size):
+    def fit(self, H1, H2, outdim_size1, outdim_size2):
         """
         An implementation of linear CCA
         # Arguments:
@@ -19,10 +19,12 @@ class linear_cca():
         r1 = 1e-4
         r2 = 1e-4
 
+        # print(f'H1 shape : {H1.shape}, H2 shape {H2.shape}')
+
         m = H1.shape[0]
         o1 = H1.shape[1]
         o2 = H2.shape[1]
-
+        
         self.m[0] = mean(H1, axis=0)
         self.m[1] = mean(H2, axis=0)
         H1bar = H1 - self.m[0].repeat(m, 1).view(m, -1)
@@ -35,7 +37,7 @@ class linear_cca():
                                                  H1bar) + r1 * eye(o1)
         SigmaHat22 = (1.0 / (m - 1)) * torch.mm(H2bar.T,
                                                  H2bar) + r2 * eye(o2)
-
+        
         [D1, V1] = symeig(SigmaHat11, eigenvectors=True)
         [D2, V2] = symeig(SigmaHat22, eigenvectors=True)
         SigmaHat11RootInv = torch.mm(torch.mm(V1, diag(D1 ** -0.5)), V1.T)
@@ -45,13 +47,14 @@ class linear_cca():
 
         [U, D, V] = Tval.svd()
         V = V.T
-        self.w[0] = torch.mm(SigmaHat11RootInv, U[:, 0:outdim_size])
-        self.w[1] = torch.mm(SigmaHat22RootInv, V[:, 0:outdim_size])
-        D = D[0:outdim_size]
+        self.w[0] = torch.mm(SigmaHat11RootInv, U[:, 0:outdim_size1])
+        self.w[1] = torch.mm(SigmaHat22RootInv, V[:, 0:outdim_size2])
+        D = D[0:outdim_size1]
 
     def _get_result(self, x, idx):
         if (self.m[0] is None) or (self.w[0] is None):
-            return x 
+            mean_x = torch.mean(x, axis=0)
+            return x - mean_x.repeat(x.shape[0], 1).view(x.shape[0], -1)
         result = x - self.m[idx].repeat(x.shape[0], 1).view(x.shape[0], -1)
         result = torch.mm(result, self.w[idx])
         return result

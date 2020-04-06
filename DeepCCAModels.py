@@ -5,7 +5,7 @@ from objectives import cca_loss
 
 
 class MlpNet(nn.Module):
-    def __init__(self, layer_sizes, input_size):
+    def __init__(self, layer_sizes, input_size, p=0.3):
         super(MlpNet, self).__init__()
         self.input_size = input_size ## flatting the data.
         layers = []
@@ -19,6 +19,8 @@ class MlpNet(nn.Module):
                 layers.append(nn.Sequential(
                     nn.Linear(layer_sizes[l_id], layer_sizes[l_id + 1], bias=True),
                     nn.ReLU(),
+                    nn.BatchNorm1d(num_features=layer_sizes[l_id + 1]),
+                    nn.Dropout(p=p),
                 ))
         self.layers = nn.ModuleList(layers)
 
@@ -30,12 +32,13 @@ class MlpNet(nn.Module):
 
 
 class DeepCCA(nn.Module):
-    def __init__(self, layer_sizes1, layer_sizes2, input_size1, input_size2, outdim_size, use_all_singular_values, device='cpu'):
+    def __init__(self, layer_sizes1, layer_sizes2, input_size1, input_size2, outdim_size1, outdim_size2,
+                         use_all_singular_values, device='cpu', p=0.3):
         super(DeepCCA, self).__init__()
-        self.model1 = MlpNet(layer_sizes1, input_size1).double()
-        self.model2 = MlpNet(layer_sizes2, input_size2).double()
+        self.model1 = MlpNet(layer_sizes1, input_size1, p=p).double()
+        self.model2 = MlpNet(layer_sizes2, input_size2, p=p).double()
 
-        self.loss = cca_loss(outdim_size, use_all_singular_values, device).loss
+        self.loss = cca_loss(outdim_size1, outdim_size2, use_all_singular_values, device).loss
 
     def forward(self, x1, x2):
         """

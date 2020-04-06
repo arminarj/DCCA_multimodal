@@ -21,10 +21,11 @@ import os
 import time
 
 from dataset import *
+import torch.optim as optim
 
 
 class Solver():
-    def __init__(self, model, linear_cca, outdim_size, hyp_params):
+    def __init__(self, model, linear_cca, outdim_size1, outdim_size2, hyp_params):
         # self.model = nn.DataParallel(model)
         self.model = model.double()
         self.model.to(hyp_params.device)
@@ -32,7 +33,7 @@ class Solver():
         self.batch_size = hyp_params.batch_size
         self.batch_chunk = hyp_params.batch_size
         self.loss = model.loss
-        self.optimizer = torch.optim.RMSprop(
+        self.optimizer = getattr(optim, hyp_params.optim)(
             self.model.parameters(), lr=hyp_params.lr, weight_decay=hyp_params.reg_par)
         self.device = hyp_params.device
         self.schedule = ReduceLROnPlateau(self.optimizer, mode='min', patience=hyp_params.when,
@@ -41,7 +42,8 @@ class Solver():
         self.use_linear_cca = True
         self.linear_cca = linear_cca
 
-        self.outdim_size = outdim_size
+        self.outdim_size1 = outdim_size1
+        self.outdim_size2 = outdim_size2
 
         self.train_loader = None
         self.test_loader = None
@@ -128,15 +130,18 @@ class Solver():
             # net = model
         
             if batch_chunk > 1:
-                raw_loss = combined_loss = 0
-                text_i, audio_i = text, audio
-                o1, o2 = net(text_i, audio_i)
-                o1, o2 = o1.squeeze(), o2.squeeze()
-                raw_loss_i = criterion(o1, o2)
-                raw_loss += raw_loss_i
-                raw_loss_i.backward()
-                raw_loss = raw_loss 
-                combined_loss = raw_loss
+                for index in range(batch_chunk):
+                    raw_loss = combined_loss = 0
+                    text_i, audio_i = text[index], audio[index]
+                    o1, o2 = net(text_i, audio_i)
+                    # print(f'o1 shape : {o1.shape}, squeezed : {o1.squeeze().shape}')
+                    # o1, o2 = o1.squeeze(), o2.squeeze()
+                    raw_loss_i = criterion(o1, o2)
+                    # print(f'loss : {raw_loss_i}')
+                    raw_loss += raw_loss_i
+                    raw_loss_i.backward()
+                    raw_loss = raw_loss 
+                    combined_loss = raw_loss
 
             else:
                 o1, o2 = net(text, audio)
@@ -146,7 +151,9 @@ class Solver():
             
             
             torch.nn.utils.clip_grad_norm_(model.parameters(), self.hyp_params.clip)
+
             optimizer.step()
+
             
             proc_loss += raw_loss.item() * batch_size
             proc_size += batch_size
@@ -160,7 +167,9 @@ class Solver():
                 start_time = time.time()
                 # self.writer.add_scalar('Loss/train', epoch_loss.cpu().numpy() / self.hyp_params.n_train, self.epoch)
                 self.writer.add_graph(self.model, (text, audio))
+                
         if self.linear_cca is not None:
+            torch.cuda.empty_cache()
             print(f'Start linear CCA Training...')
             _, outputs = self.test(loader=self.train_loader)
             self.train_linear_cca(outputs[0], outputs[1])
@@ -172,7 +181,7 @@ class Solver():
         return epoch_loss / self.hyp_params.n_train
 
     def evaluate(self, test=False, _loader=None):
-        model=self.model
+        model=self.model.to(self.device)
         device = self.device
         criterion=self.loss    
         model.eval()
@@ -188,15 +197,19 @@ class Solver():
         with torch.no_grad():
             for i_batch, (batch_X, batch_Y, batch_META) in enumerate(loader):
                 _, text, audio, _ = batch_X
-                text, audio = text.to(self.device).double(), audio.to(self.device).double()
+                text, audio = text.to(device).double(), audio.to(device).double()
                 batch_chunk = text.size(0)
                 eval_attr = batch_Y.squeeze(-1)
                 if batch_chunk > 1:
                     raw_loss = combined_loss = 0
+                    text_chunks = text.chunk(batch_chunk, dim=0)
+                    audio_chunks = audio.chunk(batch_chunk, dim=0)
+                    # for index in range(batch_chunk): 
                     o1, o2 = net(text, audio)
                     o1, o2 = o1.squeeze(), o2.squeeze()
                     output1.append(o1)
                     output2.append(o2)
+                    
                     raw_loss_i = criterion(o1, o2)
                     raw_loss += raw_loss_i
                     total_loss += criterion(o1, o2).item()
@@ -218,7 +231,7 @@ class Solver():
             outputs = [torch.cat(output1, dim=0),
                         torch.cat(output2, dim=0)]
             losses = torch.tensor(losses).double()
-            
+        
         if loader is self.train_loader:
             loss_name="train_eval"
         elif test:
@@ -229,13 +242,16 @@ class Solver():
                 outputs[1].cpu().numpy(),
             ], axis=1)
         labels = np.concatenate([labels.data,labels.data], axis=1)
-        self.writer.add_embedding(mat,
-                                metadata=labels,
-                                global_step=self.epoch
-                                # tag=["text", "audio"]
-                                )
+        # self.writer.add_embedding(mat,
+        #                         metadata=labels,
+        #                         global_step=self.epoch
+        #                         # tag=["text", "audio"]
+        #                         )
 
         self.writer.add_scalar(f'Loss/{loss_name}', losses.mean(), self.epoch)
+
+        outputs[0], outputs[1] = outputs[0].to(self.device), outputs[1].to(self.device)
+        # assert len(outputs[0]) != (50*24*678)
         return losses, outputs
 
     def test(self, test=False, loader=None):
@@ -248,5 +264,5 @@ class Solver():
             return torch.mean(losses)
 
     def train_linear_cca(self, x1, x2):
-        self.linear_cca.fit(x1, x2, self.outdim_size)
+        self.linear_cca.fit(x1, x2, self.outdim_size1, self.outdim_size2)
 
