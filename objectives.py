@@ -87,7 +87,7 @@ class cca_loss():
             # assert torch.isnan(U).item() == 0
             U = U[torch.gt(U, eps).nonzero()[:, 0]]
             if U.le(eps).sum() != 0 :
-                print(f'number of unstability : {U.le(eps).sum()}, index : {U[S.le(eps)]}')
+                print(f'number of unstability : {U.le(eps).sum()}, index : {U[U.le(eps)]}')
             U = torch.where(U>eps, U, torch.ones(U.shape).double()*eps)
             U = U.topk(self.top_k)[0]
             corr = torch.sum(torch.sqrt(U))
