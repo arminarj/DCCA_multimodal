@@ -31,8 +31,8 @@ class cca_loss():
         m = H1.size(1)
         # print(H1.size())
 
-        H1bar = H1 - H1.mean(dim=1).unsqueeze(dim=1)
-        H2bar = H2 - H2.mean(dim=1).unsqueeze(dim=1)
+        H1bar = H1 - H1.mean(dim=1).repeat(m, 1).view(m, -1)
+        H2bar = H2 - H2.mean(dim=1).repeat(m, 1).view(m, -1)
         assert torch.isnan(H1bar).sum().item() == 0
         assert torch.isnan(H2bar).sum().item() == 0
 
