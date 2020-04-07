@@ -1,9 +1,11 @@
 import torch
-from linear_cca import linear_gcca
+from torch import diag, symeig
 
 class cca_loss():
-    def __init__(self, outdim_size, use_all_singular_values, device):
-        self.outdim_size = outdim_size
+    def __init__(self, outdim_size1, outdim_size2, use_all_singular_values, device):
+        self.outdim_size1 = outdim_size1
+        self.outdim_size2 = outdim_size2
+        self.top_k = min(outdim_size1, outdim_size2)
         self.use_all_singular_values = use_all_singular_values
         self.device = device
  
@@ -13,24 +15,25 @@ class cca_loss():
         It is the loss function of CCA as introduced in the original paper. There can be other formulations.
 
         """
-
         r1 = 1e-3
         r2 = 1e-3
-        eps = 1e-9
+        eps = 1e-7
+        lambda_b = 1e-7
 
+        H1, H2 = H1.to(self.device), H2.to(self.device)
         H1, H2 = H1.t(), H2.t()
         if torch.isnan(H1).sum().item() != 0 :
             print(f'H1 : {H1}')
         assert torch.isnan(H1).sum().item() == 0 
         assert torch.isnan(H2).sum().item() == 0
 
-        o1 = o2 = H1.size(0)
-
+        o1 = H1.size(0)
+        o2 = H2.size(0)
         m = H1.size(1)
         # print(H1.size())
 
-        H1bar = H1 - H1.mean(dim=1).unsqueeze(dim=1)
-        H2bar = H2 - H2.mean(dim=1).unsqueeze(dim=1)
+        H1bar = H1 - H1.mean(dim=1).repeat(m, 1).view(m, -1)
+        H2bar = H2 - H2.mean(dim=1).repeat(m, 1).view(m, -1)
         assert torch.isnan(H1bar).sum().item() == 0
         assert torch.isnan(H2bar).sum().item() == 0
 
@@ -77,72 +80,99 @@ class cca_loss():
             corr = torch.sqrt(tmp)
             assert torch.isnan(corr).item() == 0
         else:
-            # just the top self.outdim_size singular values are used
-            U, V = torch.symeig(torch.matmul(
-                Tval.t(), Tval), eigenvectors=True)
-            # assert torch.isnan(V).item() == 0
+            # just the top self.top_k singular values are used
+            trace_TT = torch.matmul(Tval.t(), Tval)
+            trace_TT = torch.add(trace_TT, torch.eye(trace_TT.shape[0])*r1) # regularization for more tability
+            U, V = torch.symeig(trace_TT, eigenvectors=True)
+            # _, S, _= torch.svd(trace_TT, compute_uv=True)
+            # assert torch.isnan(U).item() == 0
+
             # U = U[torch.gt(U, eps).nonzero()[:, 0]]
-            U = torch.where(U>eps, U, torch.ones(U.shape).double()*eps)
-            U = U.topk(self.outdim_size)[0]
-            # print(f'U : {U}')
+
+            if U.le(eps).sum() != 0 :
+                print(f'number of unstability : {U.le(eps).sum()}, index : {U[U.le(eps)]}')
+            U = torch.where(U>eps, U, torch.ones(U.shape).double()*lambda_b)
+            U = U.topk(self.top_k)[0]
             corr = torch.sum(torch.sqrt(U))
+            # corr = torch.sum(S)
             assert torch.isnan(corr).item() == 0
         return -corr
 
 class gcca_loss():
-
-    def __init__(self, outdim_size, F, k, V=3, device='cpu', verbos=True, backend='pytorch'):
-        self.outdim_size = outdim_size
+    def __init__(self, outdim_sizes, use_all_singular_values, device):
+        self.outdim_size1 = outdim_sizes[0]
+        self.outdim_size2 = outdim_sizes[1]
+        self.outdim_size3 = outdim_sizes[2]
+        self.top_k = min(self.outdim_size1, self.outdim_size2, self.outdim_size3)
+        self.use_all_singular_values = use_all_singular_values
         self.device = device
-        self.F = F
-        self.k = k
-        self.V = 3
-        self.backend = backend
-        self.gccaModule = linear_gcca(self.V,
-                                        self.F,
-                                        self.k,
-                                        verbose=verbos,
-                                        backend=backend,
-                                        device=device) 
+ 
+    def loss(self, H1, H2, H3):
+        """
 
-    def loss_torch(self, outputs):
-        '''
-        output : list of NN outputs as [f(Xj)]
-        '''
-        self.fit(outputs)
-        print('pytorch fitting is done')
-        G, Us = self.gccaModule.G, self.gccaModule.U
-        # print(G)
-        grads = []
-        for Uval, output in zip(Us, outputs):
-            output = output.double()
-            Ushared = Uval.double()
-            grad = ( G - output.mm(Uval) ).mm(Uval.T)
-            grads.append(grad)
-        self.Us = Us
-        totall_loss = self.gccaModule 
-        return grads 
+        It is the loss function of CCA as introduced in the original paper. There can be other formulations.
 
-    def loss_np(self, outputs):
-        '''
-        output : list of NN outputs as [f(Xj)]
-        '''
-        self.fit(outputs)
-        G, Us = self.gccaModule.G, self.gccaModule.U
-        grads = []
-        for Uval, output in zip(Us, outputs):
-            Ushared = Uval
-            grad = ( G - output.dot(Uval) ).dot(Uval.T)
-            grads.append(grad)
-        self.Us = Us 
-        return grads
+        """
 
-    def loss(self, outputs):
-        if self.backend is 'pytorch':
-            return self.loss_torch(outputs)
-        else: return self.loss_np(outputs)
+        r = 1e-3
+        eps = 1e-7
+        lambda_b = 1e-4
 
-    def fit(self, outputs):
-        self.gccaModule.fit(outputs)
+        H1, H2, H3 = H1.t(), H2.t(), H3.t()
+
+        assert torch.isnan(H1).sum().item() == 0 
+        assert torch.isnan(H2).sum().item() == 0
+        assert torch.isnan(H3).sum().item() == 0
+        # print(f'H1 : {H1.shape}, H2 : {H2.shape}, H3 : {H3.shape}')
+        o1 = H1.size(0)
+        o2 = H2.size(0)
+        o3 = H3.size(0)
+        m = H1.size(1)
+        # print(H1.size())
+        ### check this from paper DeepCCA,
+        H1bar = H1 - H1.mean(dim=1).repeat(m, 1).view(-1, m)
+        H2bar = H2 - H2.mean(dim=1).repeat(m, 1).view(-1, m)
+        H3bar = H3 - H3.mean(dim=1).repeat(m, 1).view(-1, m)
+        assert torch.isnan(H1bar).sum().item() == 0
+        assert torch.isnan(H2bar).sum().item() == 0
+
+        # SigmaHat12 = (1.0 / (m - 1)) * torch.matmul(H1bar, H2bar.t())
+        SigmaHat11 = (1.0 / (m - 1)) * torch.matmul(H1bar,
+                                                    H1bar.t()) + r * torch.eye(o1, device=self.device)
+        SigmaHat22 = (1.0 / (m - 1)) * torch.matmul(H2bar,
+                                                    H2bar.t()) + r * torch.eye(o2, device=self.device)
+        SigmaHat33 = (1.0 / (m - 1)) * torch.matmul(H3bar,
+                                                    H3bar.t()) + r * torch.eye(o3, device=self.device)                                                
+        assert torch.isnan(SigmaHat11).sum().item() == 0
+        assert torch.isnan(SigmaHat22).sum().item() == 0
+        assert torch.isnan(SigmaHat33).sum().item() == 0
+
+        P1 = torch.mm(torch.mm(H1bar.t(), SigmaHat11), H1bar)
+        P2 = torch.mm(torch.mm(H2bar.t(), SigmaHat22), H2bar)
+        P3 = torch.mm(torch.mm(H3bar.t(), SigmaHat33), H3bar)
+
+        assert torch.isnan(P1).sum().item() == 0
+        assert torch.isnan(P2).sum().item() == 0
+        assert torch.isnan(P3).sum().item() == 0
+        # print(f'P1 : {P1.shape}, P2 : {P2.shape}, P3 : {P3.shape}')
+        # assert P1.shape != P2.shape
+        # assert P1.shape != P3.shape
+
+        M = torch.add(torch.add(P1, P2), P3)
+        [D1, V1] = symeig(SigmaHat11, eigenvectors=True)
+        [D2, V2] = symeig(SigmaHat22, eigenvectors=True)
+        [D3, V3] = symeig(SigmaHat33, eigenvectors=True)
+        SigmaHat11Inv = torch.mm(torch.mm(V1, diag(D1 ** -1)), V1.T)
+        SigmaHat22Inv = torch.mm(torch.mm(V2, diag(D2 ** -1)), V2.T)
+        SigmaHat33Inv = torch.mm(torch.mm(V3, diag(D3 ** -1)), V3.T)
+
+        M = torch.add(torch.add(P1, P2), P3)
 
 
+        U, V = torch.symeig(M, eigenvectors=True)
+        U = torch.where(U>eps, U, torch.ones(U.shape).double()*eps)
+        if not self.use_all_singular_values:
+            U= U.topk(self.top_k)[0]
+        corr = torch.sum(torch.sqrt(U))
+        assert torch.isnan(corr).item() == 0
+        return -corr ## Eq. to Jr(constant number) - sum(Lamda(M))

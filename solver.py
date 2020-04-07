@@ -5,7 +5,7 @@ from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from tensorboardX import SummaryWriter
 
-from linear_cca import linear_cca, linear_gcca
+from linear_cca import linear_cca
 from torch.utils.data import BatchSampler, SequentialSampler, RandomSampler
 from DeepCCAModels import DeepCCA
 from utils import *
@@ -23,14 +23,15 @@ import time
 from dataset import *
 import torch.optim as optim
 
+
 class Solver():
-    def __init__(self, model, linear_cca, outdim_size, hyp_params):
+    def __init__(self, model, linear_cca, outdim_sizes, hyp_params):
         # self.model = nn.DataParallel(model)
         self.model = model.double()
         self.model.to(hyp_params.device)
         self.epoch_num = hyp_params.num_epochs
         self.batch_size = hyp_params.batch_size
-        self.batch_chunk = 50
+        self.batch_chunk = hyp_params.batch_size
         self.loss = model.loss
         self.optimizer = getattr(optim, hyp_params.optim)(
             self.model.parameters(), lr=hyp_params.lr, weight_decay=hyp_params.reg_par)
@@ -41,7 +42,8 @@ class Solver():
         self.use_linear_cca = True
         self.linear_cca = linear_cca
 
-        self.outdim_size = outdim_size
+        self.outdim_sizes = outdim_sizes
+
 
         self.train_loader = None
         self.test_loader = None
@@ -121,7 +123,6 @@ class Solver():
             model.zero_grad()
 
             text, audio, vision = text.to(self.device).double(), audio.to(self.device).double(), vision.to(self.device).double()
-            print(f'text shape : {text.shape}, audio shape : {audio.shape}, vision shape : {vision.shape}')
             batch_chunk = text.size(0)
                 
             combined_loss = 0
@@ -129,32 +130,27 @@ class Solver():
             # net = model
         
             if batch_chunk > 1:
-                raw_loss = combined_loss = 0
-                text_i, audio_i, vision_i = text, audio, vision
-                outputs = net(text_i, audio_i, vision_i)
-                for out in outputs:
-                    print(out.shape)
-                grads = criterion(outputs)
-                for output, grad in zip(outputs, grads):
-                    output.grad = grad
-                    output.backward()
-                raw_loss_i = 0
-                for loss in raw_loss_i:
-                    loss.backward()
-                raw_loss += raw_loss_i
-                raw_loss_i.backward()
-                raw_loss = raw_loss 
-                combined_loss = raw_loss
+                for index in range(batch_chunk):
+                    raw_loss = combined_loss = 0
+                    text_i, audio_i, vision_i = text[index], audio[index], vision[index]
+                    o1, o2 , o3= net(text_i, audio_i, vision_i)
+                    raw_loss_i = criterion(o1, o2, o3)
+                    raw_loss += raw_loss_i
+                    raw_loss_i.backward()
+                    raw_loss = raw_loss 
+                    combined_loss = raw_loss
 
             else:
-                o1, o2 = net(text, audio)
-                raw_loss = self.loss(o1, o2)
+                o1, o2, o3 = net(text, audio, vision)
+                raw_loss = self.loss(o1, o2, o3)
                 combined_loss = raw_loss 
                 combined_loss.backward()
             
             
             torch.nn.utils.clip_grad_norm_(model.parameters(), self.hyp_params.clip)
+
             optimizer.step()
+
             
             proc_loss += raw_loss.item() * batch_size
             proc_size += batch_size
@@ -168,10 +164,12 @@ class Solver():
                 start_time = time.time()
                 # self.writer.add_scalar('Loss/train', epoch_loss.cpu().numpy() / self.hyp_params.n_train, self.epoch)
                 self.writer.add_graph(self.model, (text, audio))
+                
         if self.linear_cca is not None:
+            torch.cuda.empty_cache()
             print(f'Start linear CCA Training...')
             _, outputs = self.test(loader=self.train_loader)
-            self.train_linear_cca(outputs)
+            self.train_linear_cca(outputs[0], outputs[1])
             print(f'End linear CCA Training...')
         for name, param in self.model.model1.named_parameters():
             self.writer.add_histogram(name, param.clone().cpu().data.numpy(), self.epoch)
@@ -180,7 +178,7 @@ class Solver():
         return epoch_loss / self.hyp_params.n_train
 
     def evaluate(self, test=False, _loader=None):
-        model=self.model
+        model=self.model.to(self.device)
         device = self.device
         criterion=self.loss    
         model.eval()
@@ -191,44 +189,44 @@ class Solver():
     
 
         net = model
-        outputs_list, losses = [], []
+        output1, output2, output3 = [], [], []
+        losses = [] 
         labels = []
         with torch.no_grad():
             for i_batch, (batch_X, batch_Y, batch_META) in enumerate(loader):
                 _, text, audio, vision = batch_X
-                text, audio, vision = text.to(self.device).double(), audio.to(self.device).double(), vision.to(self.device).double()
+                text, audio, vision = text.to(device).double(), audio.to(device).double(), vision.to(device).double()
                 batch_chunk = text.size(0)
                 eval_attr = batch_Y.squeeze(-1)
                 if batch_chunk > 1:
                     raw_loss = combined_loss = 0
-                    outputs = net(text, audio, vision)
-                    # o1, o2 = o1.squeeze(), o2.squeeze()
-                    outputs_list.append(outputs)
-                    # output2.append(o2)
-                    # grads = criterion(outputs)
-                    raw_loss_i = 0
-                    raw_loss += raw_loss_i
-                    # total_loss += criterion(o1, o2).item()
+                    o1, o2, o3 = net(text, audio, vision)
+                    o1, o2, o3 = o1.squeeze(), o2.squeeze(), o3.squeeze()
+                    output1.append(o1)
+                    output2.append(o2)
+                    output3.append(o2) 
+                    total_loss += criterion(o1, o2, o3).item()
                     losses.append(total_loss)
                     labels.append(eval_attr)
-                    # if i_batch % self.log_interval == 0 and i_batch > 0:
-                    #     out = torch.cat([o1, o2], dim=-1)
+
 
 
                 else:
-                    outputs= net(text, audio, vision)
-                    outputs_list.append(outputs)
-                    # output2.append(o2)
-                    # raw_loss = self.loss(o1, o2)
-                    # combined_loss = raw_loss
-                    losses.append(combined_loss) 
+                    o1, o2, o3 = net(text, audio, vision)
+                    output1.append(o1)
+                    output2.append(o2)
+                    output2.append(o3)
+                    raw_loss = self.loss(o1, o2, o3)
+                    combined_loss = raw_loss
+                    losses.append(total_loss) 
             
             labels = torch.cat(labels, dim=0)
-            outputs = [torch.cat(outputs_list[:, 0], dim=0),
-                        torch.cat(outputs_list[:, 1], dim=0),
-                        torch.cat(outputs_list[:, 2], dim=0)]
+            outputs = [torch.cat(output1, dim=0),
+                        torch.cat(output2, dim=0),
+                        torch.cat(output3, dim=0)
+                        ]
             losses = torch.tensor(losses).double()
-            
+        
         if loader is self.train_loader:
             loss_name="train_eval"
         elif test:
@@ -237,8 +235,9 @@ class Solver():
         mat = np.concatenate([
                 outputs[0].cpu().numpy(),
                 outputs[1].cpu().numpy(),
+                outputs[2].cpu().numpy(),
             ], axis=1)
-        labels = np.concatenate([labels.data,labels.data], axis=1)
+        labels = np.concatenate([labels.data]*3, axis=1)
         self.writer.add_embedding(mat,
                                 metadata=labels,
                                 global_step=self.epoch
@@ -246,6 +245,9 @@ class Solver():
                                 )
 
         self.writer.add_scalar(f'Loss/{loss_name}', losses.mean(), self.epoch)
+
+        outputs[0], outputs[1] = outputs[0].to(self.device), outputs[1].to(self.device)
+        # assert len(outputs[0]) != (50*24*678)
         return losses, outputs
 
     def test(self, test=False, loader=None):
@@ -257,6 +259,6 @@ class Solver():
         else:
             return torch.mean(losses)
 
-    def train_linear_cca(self, outputs):
-        self.linear_cca.fit(outputs, self.outdim_size)
+    def train_linear_cca(self, x1, x2):
+        self.linear_cca.fit(x1, x2, self.outdim_sizes)
 
