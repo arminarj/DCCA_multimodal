@@ -135,6 +135,7 @@ class gcca_loss():
         H3bar = H3 - H3.mean(dim=1).repeat(m, 1).view(-1, m)
         assert torch.isnan(H1bar).sum().item() == 0
         assert torch.isnan(H2bar).sum().item() == 0
+        assert torch.isnan(H3bar).sum().item() == 0 
 
         # SigmaHat12 = (1.0 / (m - 1)) * torch.matmul(H1bar, H2bar.t())
         SigmaHat11 = (1.0 / (m - 1)) * torch.matmul(H1bar,

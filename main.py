@@ -46,7 +46,7 @@ parser.add_argument('--data_path', type=str, default='/Volumes/ADATA HD725/datas
                     help='path for storing the dataset')
 
 # Dropouts
-parser.add_argument('--dropout', type=float, default=0.3,
+parser.add_argument('--dropout', type=float, default=0.1,
                     help='attention dropout')
 parser.add_argument('--relu_dropout', type=float, default=0.1,
                     help='relu dropout')

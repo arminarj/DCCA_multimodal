@@ -82,35 +82,46 @@ class linear_gcca():
 
         # print(f'H1 shape : {H1.shape}, H2 shape {H2.shape}')
 
-        m = H1.shape[0]
-        o1 = H1.shape[1]
-        o2 = H2.shape[1]
-        o3 = H3.shape[1]
+        H1, H2, H3 = H1.t(), H2.t(), H3.t()
+
+        assert torch.isnan(H1).sum().item() == 0 
+        assert torch.isnan(H2).sum().item() == 0
+        assert torch.isnan(H3).sum().item() == 0
+
+        o1 = H1.size(0)
+        o2 = H2.size(0)
+        o3 = H3.size(0)
+        m = H1.size(1)
 
         top_k = torch.min(torch.tensor(outdim_sizes)) 
 
-        self.m[0] = mean(H1, axis=0)
-        self.m[1] = mean(H2, axis=0)
-        self.m[2] = mean(H3, axis=0)
+        H1bar = H1 - H1.mean(dim=1).repeat(m, 1).view(-1, m)
+        H2bar = H2 - H2.mean(dim=1).repeat(m, 1).view(-1, m)
+        H3bar = H3 - H3.mean(dim=1).repeat(m, 1).view(-1, m)
+        assert torch.isnan(H1bar).sum().item() == 0
+        assert torch.isnan(H2bar).sum().item() == 0
+        assert torch.isnan(H3bar).sum().item() == 0
 
-        H1bar = H1 - self.m[0].repeat(m, 1).view(m, -1)
-        H2bar = H2 - self.m[1].repeat(m, 1).view(m, -1)
-        H3bar = H3 - self.m[2].repeat(m, 1).view(m, -1)
-        assert H1bar.shape == H1.shape
-        assert H2bar.shape == H2.shape
-        assert H3bar.shape == H3.shape
-
-        SigmaHat11 = (1.0 / (m - 1)) * torch.mm(H1bar.T,
-                                                 H1bar) + r * eye(o1)
-        SigmaHat22 = (1.0 / (m - 1)) * torch.mm(H2bar.T,
-                                                 H2bar) + r * eye(o2)
-        SigmaHat33 = (1.0 / (m - 1)) * torch.mm(H3bar.T,
-                                                 H3bar) + r * eye(o3)
+        print(f'Hbar shape : {H1bar.shape}, Hbar.T shape : {H1bar.T.shape}')
+        SigmaHat11 = (1.0 / (m - 1)) * torch.mm(H1bar,
+                                                 H1bar.T) + r * eye(o1)
+        SigmaHat22 = (1.0 / (m - 1)) * torch.mm(H2bar,
+                                                 H2bar.T) + r * eye(o2)
+        SigmaHat33 = (1.0 / (m - 1)) * torch.mm(H3bar,
+                                                 H3bar.T) + r * eye(o3)
 
 
-        P1 = torch.mm(torch.mm(H1bar.t(), SigmaHat11), H1bar)
-        P2 = torch.mm(torch.mm(H2bar.t(), SigmaHat22), H2bar)
-        P3 = torch.mm(torch.mm(H3bar.t(), SigmaHat33), H3bar)
+        [D1, V1] = symeig(SigmaHat11, eigenvectors=True)
+        [D2, V2] = symeig(SigmaHat22, eigenvectors=True)
+        [D3, V3] = symeig(SigmaHat33, eigenvectors=True)
+        SigmaHat11Inv = torch.mm(torch.mm(V1, diag(D1 ** -1)), V1.T)
+        SigmaHat22Inv = torch.mm(torch.mm(V2, diag(D2 ** -1)), V2.T)
+        SigmaHat33Inv = torch.mm(torch.mm(V3, diag(D3 ** -1)), V3.T)
+
+
+        P1 = torch.mm(torch.mm(H1bar.t(), SigmaHat11Inv), H1bar)
+        P2 = torch.mm(torch.mm(H2bar.t(), SigmaHat22Inv), H2bar)
+        P3 = torch.mm(torch.mm(H3bar.t(), SigmaHat33Inv), H3bar)
 
         assert torch.isnan(P1).sum().item() == 0
         assert torch.isnan(P2).sum().item() == 0
@@ -119,26 +130,28 @@ class linear_gcca():
         assert P1.shape != P3.shape
 
         M = torch.add(torch.add(P1, P2), P3)
-        [D1, V1] = symeig(SigmaHat11, eigenvectors=True)
-        [D2, V2] = symeig(SigmaHat22, eigenvectors=True)
-        [D3, V3] = symeig(SigmaHat33, eigenvectors=True)
-        SigmaHat11Inv = torch.mm(torch.mm(V1, diag(D1 ** -1)), V1.T)
-        SigmaHat22Inv = torch.mm(torch.mm(V2, diag(D2 ** -1)), V2.T)
-        SigmaHat33Inv = torch.mm(torch.mm(V3, diag(D3 ** -1)), V3.T)
 
-        [U, D, V] = M.svd()
+
+        [U, V] = M.svd()
         V = V.T
-        self.G =  U[:, 0:top_k]
+        self.G =  V[:, 0:top_k]
+
+        assert torch.isnan(self.G).sum().item() == 0
+
         self.U[0] = torch.mm(torch.mm(SigmaHat11Inv, H1bar), G.t())
         self.U[1] = torch.mm(torch.mm(SigmaHat22Inv, H2bar), G.t())
         self.U[2] = torch.mm(torch.mm(SigmaHat33Inv, H3bar), G.t())
- 
+
+        assert torch.isnan(self.U[0]).sum().item() == 0
+        assert torch.isnan(self.U[1]).sum().item() == 0
+        assert torch.isnan(self.U[2]).sum().item() == 0
+
     def _get_result(self, x, idx):
-        if (self.m[0] is None) or (self.w[0] is None):
+        if (self.m[0] is None) or (self.U[0] is None):
             mean_x = torch.mean(x, axis=0)
             return x - mean_x.repeat(x.shape[0], 1).view(x.shape[0], -1)
         result = x - self.m[idx].repeat(x.shape[0], 1).view(x.shape[0], -1)
-        result = torch.mm(result, self.w[idx])
+        result = torch.mm(result, self.U[idx])
         return result
 
     def test(self, H1, H2, H3): 
