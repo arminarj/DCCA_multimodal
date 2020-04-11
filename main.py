@@ -150,8 +150,8 @@ hyp_params.device = 'cuda' if use_cuda else 'cpu'
 if __name__ == '__main__':
     ############
     # the size of the new space learned by the model (number of the new features)
-    outdim_size1 = 3
-    outdim_size2 = 3
+    outdim_size1 = 10
+    outdim_size2 = 10
 
     # size of the input for view 1 and view 2
     input_shape1 = 300

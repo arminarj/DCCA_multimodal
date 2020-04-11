@@ -139,6 +139,7 @@ class Solver():
                     raw_loss_i = criterion(o1, o2)
                     # print(f'loss : {raw_loss_i}')
                     raw_loss += raw_loss_i
+                    assert torch.isnan(raw_loss).sum().item() == 0
                     raw_loss_i.backward()
                     raw_loss = raw_loss 
                     combined_loss = raw_loss
