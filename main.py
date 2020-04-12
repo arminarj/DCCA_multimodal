@@ -46,7 +46,7 @@ parser.add_argument('--data_path', type=str, default='/Volumes/ADATA HD725/datas
                     help='path for storing the dataset')
 
 # Dropouts
-parser.add_argument('--attn_dropout', type=float, default=0.1,
+parser.add_argument('--dropout', type=float, default=0.3,
                     help='attention dropout')
 parser.add_argument('--relu_dropout', type=float, default=0.1,
                     help='relu dropout')
@@ -58,7 +58,7 @@ parser.add_argument('--batch_size', type=int, default=400, metavar='N',
                     help='batch size (default: 400)')
 parser.add_argument('--clip', type=float, default=0.8,
                     help='gradient clip value (default: 0.8)')
-parser.add_argument('--lr', type=float, default=1e-8,
+parser.add_argument('--lr', type=float, default=1e-6,
                     help='initial learning rate (default: 1e-3)')
 parser.add_argument('--optim', type=str, default='Adam',
                     help='optimizer to use (default: Adam)')
@@ -150,16 +150,17 @@ hyp_params.device = 'cuda' if use_cuda else 'cpu'
 if __name__ == '__main__':
     ############
     # the size of the new space learned by the model (number of the new features)
-    outdim_size = 100
+    outdim_size1 = 10
+    outdim_size2 = 10
 
     # size of the input for view 1 and view 2
-    input_shape1 = 300*50
-    input_shape2 = 74*50
+    input_shape1 = 300
+    input_shape2 = 74
 
     # number of layers with nodes in each one
-    layer_size = [1024]* (hyp_params.layers-1)
-    layer_sizes1 = layer_size + [outdim_size]
-    layer_sizes2 = layer_size + [outdim_size]
+    layer_size = [512]* (hyp_params.layers-1)
+    layer_sizes1 = layer_size + [outdim_size1]
+    layer_sizes2 = layer_size + [outdim_size2]
 
     # the parameters for training the network
 
@@ -180,12 +181,12 @@ if __name__ == '__main__':
 
     # Building, training, and producing the new features by DCCA
     model = DeepCCA(layer_sizes1, layer_sizes2, input_shape1,
-                    input_shape2, outdim_size, use_all_singular_values, device=hyp_params.device)
+                    input_shape2, outdim_size1, outdim_size2, use_all_singular_values, device=hyp_params.device, p=hyp_params.dropout)
 
     l_cca = None
     if apply_linear_cca:
         l_cca = linear_cca()
-    solver = Solver(model, l_cca, outdim_size, hyp_params)
+    solver = Solver(model, l_cca, outdim_size1, outdim_size2, hyp_params)
 
     solver.fit(train_loader, valid_loader, test_loader)
 

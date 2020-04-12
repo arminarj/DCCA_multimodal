@@ -2,8 +2,10 @@ import torch
 
 
 class cca_loss():
-    def __init__(self, outdim_size, use_all_singular_values, device):
-        self.outdim_size = outdim_size
+    def __init__(self, outdim_size1, outdim_size2, use_all_singular_values, device):
+        self.outdim_size1 = outdim_size1
+        self.outdim_size2 = outdim_size2
+        self.top_k = min(outdim_size1, outdim_size2)
         self.use_all_singular_values = use_all_singular_values
         self.device = device
  
@@ -13,24 +15,24 @@ class cca_loss():
         It is the loss function of CCA as introduced in the original paper. There can be other formulations.
 
         """
-
         r1 = 1e-3
         r2 = 1e-3
-        eps = 1e-9
-
+        eps = 1e-7
+        lambda_b = 1e-2
+        H1, H2 = H1.to(self.device), H2.to(self.device)
         H1, H2 = H1.t(), H2.t()
         if torch.isnan(H1).sum().item() != 0 :
             print(f'H1 : {H1}')
         assert torch.isnan(H1).sum().item() == 0 
         assert torch.isnan(H2).sum().item() == 0
 
-        o1 = o2 = H1.size(0)
-
+        o1 = H1.size(0)
+        o2 = H2.size(0)
         m = H1.size(1)
         # print(H1.size())
 
-        H1bar = H1 - H1.mean(dim=1).unsqueeze(dim=1)
-        H2bar = H2 - H2.mean(dim=1).unsqueeze(dim=1)
+        H1bar = H1 - H1.mean(dim=1).repeat(m, 1).view(-1, m)
+        H2bar = H2 - H2.mean(dim=1).repeat(m, 1).view(-1, m)
         assert torch.isnan(H1bar).sum().item() == 0
         assert torch.isnan(H2bar).sum().item() == 0
 
@@ -77,14 +79,18 @@ class cca_loss():
             corr = torch.sqrt(tmp)
             assert torch.isnan(corr).item() == 0
         else:
-            # just the top self.outdim_size singular values are used
-            U, V = torch.symeig(torch.matmul(
-                Tval.t(), Tval), eigenvectors=True)
-            # assert torch.isnan(V).item() == 0
-            # U = U[torch.gt(U, eps).nonzero()[:, 0]]
+            # just the top self.top_k singular values are used
+            trace_TT = torch.matmul(Tval.t(), Tval)
+            trace_TT = torch.add(trace_TT, torch.eye(trace_TT.shape[0])*r1) # regularization for more tability
+            U, V = torch.symeig(trace_TT, eigenvectors=True)
+            # _, S, _= torch.svd(trace_TT, compute_uv=True)
+            # assert torch.isnan(U).item() == 0
+            U = U[torch.gt(U, eps).nonzero()[:, 0]]
+            if U.le(eps).sum() != 0 :
+                print(f'number of unstability : {U.le(eps).sum()}, index : {U[U.le(eps)]}')
             U = torch.where(U>eps, U, torch.ones(U.shape).double()*eps)
-            U = U.topk(self.outdim_size)[0]
-            # print(f'U : {U}')
+            U = U.topk(self.top_k)[0]
             corr = torch.sum(torch.sqrt(U))
+            # corr = torch.sum(S)
             assert torch.isnan(corr).item() == 0
         return -corr
