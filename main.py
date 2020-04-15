@@ -59,7 +59,7 @@ parser.add_argument('--batch_size', type=int, default=24, metavar='N',
 parser.add_argument('--clip', type=float, default=0.8,
                     help='gradient clip value (default: 0.8)')
 parser.add_argument('--lr', type=float, default=1e-7,
-                    help='initial learning rate (default: 1e-3)')
+                    help='initial learning rate (default: 1e-7)')
 parser.add_argument('--optim', type=str, default='Adam',
                     help='optimizer to use (default: Adam)')
 parser.add_argument('--num_epochs', type=int, default=10,
@@ -150,9 +150,9 @@ hyp_params.device = 'cuda' if use_cuda else 'cpu'
 if __name__ == '__main__':
     ############
     # the size of the new space learned by the model (number of the new features)
-    outdim_size1 = 3
-    outdim_size2 = 3
-    outdim_size3 = 3
+    outdim_size1 = 30
+    outdim_size2 = 30
+    outdim_size3 = 30
     outdim_sizes = [outdim_size1, outdim_size2, outdim_size3]
 
     # size of the input for view 1 and view 2

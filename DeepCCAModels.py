@@ -12,15 +12,16 @@ class MlpNet(nn.Module):
         layer_sizes = [input_size] + layer_sizes
         for l_id in range(len(layer_sizes) - 1):
             if l_id == len(layer_sizes) - 2:
-                layers.append(
+                layers.append(nn.Sequential(
+                    nn.BatchNorm1d(num_features=layer_sizes[l_id], affine=False),
                     nn.Linear(layer_sizes[l_id], layer_sizes[l_id + 1], bias=True),
-                )
+                ))
             else:
                 layers.append(nn.Sequential(
                     nn.Linear(layer_sizes[l_id], layer_sizes[l_id + 1], bias=True),
                     nn.ReLU(),
-                    nn.BatchNorm1d(num_features=layer_sizes[l_id + 1]),
-                    nn.Dropout(p=p),
+                    # nn.BatchNorm1d(num_features=layer_sizes[l_id + 1]),
+                    # nn.Dropout(p=p),
                 ))
         self.layers = nn.ModuleList(layers)
 
