@@ -68,7 +68,7 @@ class linear_gcca():
         self.U = [None, None, None] 
         self.m = [None, None, None] # mean
 
-    def fit(self, H1, H2, H3, outdim_sizes, device='cpu'):
+    def fit(self, H1, H2, H3, outdim_sizes, device='cuda'):
         """
         An implementation of linear GCCA
         # Arguments:
@@ -132,9 +132,9 @@ class linear_gcca():
         assert torch.isnan(T2_2).sum().item() == 0
         assert torch.isnan(T2_3).sum().item() == 0
 
-        T2_1 = torch.where(T2_1>eps, T2_1, (torch.ones(T2_1.shape)*eps).to(device))
-        T2_2 = torch.where(T2_2>eps, T2_2, (torch.ones(T2_2.shape)*eps).to(device))
-        T2_3 = torch.where(T2_3>eps, T2_3, (torch.ones(T2_3.shape)*eps).to(device))
+        T2_1 = torch.where(T2_1>eps, T2_1, (torch.ones(T2_1.shape)*eps).to(device).double())
+        T2_2 = torch.where(T2_2>eps, T2_2, (torch.ones(T2_2.shape)*eps).to(device).double())
+        T2_3 = torch.where(T2_3>eps, T2_3, (torch.ones(T2_3.shape)*eps).to(device).double())
 
 
         T_1 = torch.diag(torch.sqrt(T2_1))
@@ -167,14 +167,14 @@ class linear_gcca():
 
         assert torch.isnan(R).sum().item() == 0
         assert torch.isnan(Q).sum().item() == 0
-        
+
         U, lbda, _ = R.svd(some=False, compute_uv=True)
 
         assert torch.isnan(U).sum().item() == 0
         assert torch.isnan(lbda).sum().item() == 0
 
-        self.G = Q.mul(U[:,:top_k])
-        print(f'G shape : {G.shape}')
+        self.G = Q.mm(U[:,:top_k])
+        print(f'G shape : {self.G.shape}')
         assert torch.isnan(self.G).sum().item() == 0
 
 

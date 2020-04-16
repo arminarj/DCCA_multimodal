@@ -26,7 +26,6 @@ class MlpNet(nn.Module):
         self.layers = nn.ModuleList(layers)
 
     def forward(self, x):
-        x = x.view(-1, self.input_size)
         for layer in self.layers:
             x = layer(x)
         return x

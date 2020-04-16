@@ -118,7 +118,7 @@ class Solver():
         start_time = time.time()
         batch_size = self.batch_size
         for i_batch, (batch_X, batch_Y, batch_META) in enumerate(self.train_loader):
-            break
+            # break
             sample_ind, text, audio, vision = batch_X
             eval_attr = batch_Y.squeeze(-1)   # if num of labels is 1
             
@@ -165,7 +165,7 @@ class Solver():
                 proc_loss, proc_size = 0, 0
                 start_time = time.time()
                 # self.writer.add_scalar('Loss/train', epoch_loss.cpu().numpy() / self.hyp_params.n_train, self.epoch)
-                self.writer.add_graph(self.model, (text, audio, vision))
+                # self.writer.add_graph(self.model, (text, audio, vision))
                 
         if self.linear_cca is not None:
             torch.cuda.empty_cache()

@@ -118,7 +118,7 @@ class gcca_loss():
         eps = 1e-7
         lambda_b = 1e-4
 
-        H1, H2, H3 = H1.t(), H2.t(), H3.t()
+        # H1, H2, H3 = H1.t(), H2.t(), H3.t()
 
         assert torch.isnan(H1).sum().item() == 0 
         assert torch.isnan(H2).sum().item() == 0
