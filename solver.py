@@ -69,7 +69,7 @@ class Solver():
         """
 
         x1, x2 are the vectors needs to be make correlated
-        dim=[batch_size, feats]
+        dim=[batch_size, seq, feats]
 
         """
         self.train_loader = train_loader
@@ -79,7 +79,7 @@ class Solver():
         for epoch in range(1, self.epoch_num+1):
             self.epoch = epoch
             start = time.time()
-            self.train(epoch)
+            train_loss = self.train(epoch)
             val_loss, _ = self.test(False)
             test_loss, _ = self.test(True) 
             end = time.time()
@@ -87,7 +87,7 @@ class Solver():
             self.schedule.step(val_loss)    # Decay learning rate by validation loss
 
             print("-"*50)
-            print('Epoch {:2d} | Time {:5.4f} sec | Valid Loss {:5.4f} | Test Loss {:5.4f}'.format(epoch, duration, val_loss, test_loss))
+            print('Epoch {:2d} | Time {:5.4f} sec | Train Loss {:5.4f} | Valid Loss {:5.4f} | Test Loss {:5.4f}'.format(epoch, duration, train_loss, val_loss, test_loss))
             print("-"*50)
 
             if val_loss < best_valid:
@@ -136,14 +136,9 @@ class Solver():
                     raw_loss = combined_loss = 0
                     text_i, audio_i = text[index], audio[index]
                     o1, o2 = net(text_i, audio_i)
-                    # print(f'o1 shape : {o1.shape}, squeezed : {o1.squeeze().shape}')
-                    # o1, o2 = o1.squeeze(), o2.squeeze()
                     raw_loss_i = criterion(o1, o2)
-                    # print(f'loss : {raw_loss_i}')
                     raw_loss += raw_loss_i
-                    assert torch.isnan(raw_loss).sum().item() == 0
                     raw_loss_i.backward()
-                    raw_loss = raw_loss 
                     combined_loss = raw_loss
 
             else:
@@ -168,7 +163,6 @@ class Solver():
                     format(epoch, i_batch, num_batches, elapsed_time * 1000 / self.hyp_params.log_interval, avg_loss))
                 proc_loss, proc_size = 0, 0
                 start_time = time.time()
-                # self.writer.add_scalar('Loss/train', epoch_loss.cpu().numpy() / self.hyp_params.n_train, self.epoch)
                 self.writer.add_graph(self.model, (text, audio))
                 
 
@@ -176,7 +170,8 @@ class Solver():
             self.writer.add_histogram(name, param.clone().cpu().data.numpy(), self.epoch)
         for name, param in self.model.model1.named_parameters():
             self.writer.add_histogram(name, param.clone().cpu().data.numpy(), self.epoch)
-        return epoch_loss / self.hyp_params.n_train
+        self.writer.add_scalar('Loss/train', avg_loss, self.epoch)
+        return avg_loss
 
     def evaluate(self, test=False, _loader=None):
         model=self.model.to(self.device)
@@ -202,7 +197,6 @@ class Solver():
                     raw_loss = combined_loss = 0
                     text_chunks = text.chunk(batch_chunk, dim=0)
                     audio_chunks = audio.chunk(batch_chunk, dim=0)
-                    # for index in range(batch_chunk): 
                     o1, o2 = net(text, audio)
                     o1, o2 = o1.squeeze(), o2.squeeze()
                     output1.append(o1)
@@ -213,8 +207,7 @@ class Solver():
                     total_loss += criterion(o1, o2).item()
                     losses.append(total_loss)
                     labels.append(eval_attr)
-                    # if i_batch % self.log_interval == 0 and i_batch > 0:
-                    #     out = torch.cat([o1, o2], dim=-1)
+
 
 
                 else:
@@ -259,7 +252,7 @@ class Solver():
             outputs = self.linear_cca.test(outputs[0], outputs[1])
             return torch.mean(losses), outputs
         else:
-            return torch.mean(losses)
+            return torch.mean(losses), outputs
 
     def train_linear_cca(self, x1, x2):
         self.linear_cca.fit(x1, x2, self.outdim_size1, self.outdim_size2)
