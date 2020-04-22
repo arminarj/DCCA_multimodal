@@ -31,11 +31,11 @@ import argparse
 torch.set_default_tensor_type(torch.DoubleTensor)
 
 
-parser = argparse.ArgumentParser(description='MOSEI Sentiment Analysis')
+parser = argparse.ArgumentParser(description='MOSEI DeepCCA Analysis')
 parser.add_argument('-f', default='', type=str)
 
 # Fixed
-parser.add_argument('--model', type=str, default='DCCA',
+parser.add_argument('--model', type=str, default='DeepCCA',
                     help='name of the model to use (Transformer, etc.)')
 
 parser.add_argument('--aligned', default=True,
@@ -66,9 +66,9 @@ parser.add_argument('--num_epochs', type=int, default=10,
                     help='number of epochs (default: 10)')
 parser.add_argument('--when', type=int, default=20,
                     help='when to decay learning rate (default: 20)')
-parser.add_argument('--batch_chunk', type=int, default=24,
+parser.add_argument('--batch_chunk', type=int, default=50,
                     help='number of chunks per batch (default: 1)')
-parser.add_argument('--reg_par', type=float, default=1e-9,
+parser.add_argument('--reg_par', type=float, default=1e-8,
                     help='the regularization parameter of the network')
 # Logistics
 parser.add_argument('--log_interval', type=int, default=30,
@@ -123,8 +123,7 @@ valid_loader = DataLoader(valid_data, batch_size=args.batch_size, shuffle=False)
 test_loader = DataLoader(test_data, batch_size=args.batch_size, shuffle=False)
 
 print('Finish loading the data....')
-if not args.aligned:
-    print("### Note: You are running in unaligned mode.")
+
 
 ####################################################################
 #

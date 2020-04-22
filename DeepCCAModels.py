@@ -20,7 +20,7 @@ class MlpNet(nn.Module):
                 layers.append(nn.Sequential(
                     nn.Linear(layer_sizes[l_id], layer_sizes[l_id + 1], bias=True),
                     nn.ReLU(),
-                    nn.BatchNorm1d(num_features=layer_sizes[l_id + 1]), 
+                    nn.BatchNorm1d(num_features=layer_sizes[l_id + 1], affine=False),
                     nn.Dropout(p=p),
                 ))
         self.layers = nn.ModuleList(layers)
