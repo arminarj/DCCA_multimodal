@@ -81,8 +81,7 @@ class Solver():
             start = time.time()
             self.train(epoch)
             val_loss, _ = self.test(False)
-            test_loss, _ = self.test(True)
-            
+            test_loss, _ = self.test(True) 
             end = time.time()
             duration = end-start
             self.schedule.step(val_loss)    # Decay learning rate by validation loss
@@ -96,6 +95,9 @@ class Solver():
                 save_model(self.hyp_params, self.model, name=name)
                 print(f"Saved model at pre_trained_models/{name}.pt")
                 best_valid = val_loss
+        if self.linear_cca is not None:
+            self._train_linear_dcca()
+    
         
         self.writer.close()
         self.model = load_model(self.hyp_params, name=self.hyp_params.name)
@@ -169,12 +171,7 @@ class Solver():
                 # self.writer.add_scalar('Loss/train', epoch_loss.cpu().numpy() / self.hyp_params.n_train, self.epoch)
                 self.writer.add_graph(self.model, (text, audio))
                 
-        if self.linear_cca is not None:
-            torch.cuda.empty_cache()
-            print(f'Start linear CCA Training...')
-            _, outputs = self.test(loader=self.train_loader)
-            self.train_linear_cca(outputs[0], outputs[1])
-            print(f'End linear CCA Training...')
+
         for name, param in self.model.model1.named_parameters():
             self.writer.add_histogram(name, param.clone().cpu().data.numpy(), self.epoch)
         for name, param in self.model.model1.named_parameters():
@@ -267,3 +264,8 @@ class Solver():
     def train_linear_cca(self, x1, x2):
         self.linear_cca.fit(x1, x2, self.outdim_size1, self.outdim_size2)
 
+    def _train_linear_dcca(self):
+        print(f'Start linear CCA Training...')
+        _, outputs = self.test(loader=self.train_loader)
+        self.train_linear_cca(outputs[0], outputs[1])
+        print(f'End linear CCA Training...')
