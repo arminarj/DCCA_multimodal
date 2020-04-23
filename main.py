@@ -1,5 +1,5 @@
-%load_ext autoreload
-%autoreload 2
+# %load_ext autoreload
+# %autoreload 2
 import torch
 import torch.nn as nn
 from torch.utils.data.dataset import Dataset
