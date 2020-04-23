@@ -1,3 +1,5 @@
+%load_ext autoreload
+%autoreload 2
 import torch
 import torch.nn as nn
 from torch.utils.data.dataset import Dataset
@@ -40,13 +42,13 @@ parser.add_argument('--model', type=str, default='DeepCCA',
 
 parser.add_argument('--aligned', default=True,
                     help='consider aligned experiment or not (default: False)')
-parser.add_argument('--dataset', type=str, default='mosei_senti',
-                    help='dataset to use (default: mosei_senti)')
-parser.add_argument('--data_path', type=str, default='/Volumes/ADATA HD725/dataset',
+parser.add_argument('--dataset', type=str, default='torch_tensors_audio',
+                    help='dataset to use (default: "torch_tensors_audio" ')
+parser.add_argument('--data_path', type=str, default='/content/DCCA_multimodal/data',
                     help='path for storing the dataset')
 
 # Dropouts
-parser.add_argument('--dropout', type=float, default=0.3,
+parser.add_argument('--dropout', type=float, default=0.05,
                     help='attention dropout')
 parser.add_argument('--relu_dropout', type=float, default=0.1,
                     help='relu dropout')
@@ -54,24 +56,24 @@ parser.add_argument('--relu_dropout', type=float, default=0.1,
 
 
 # Tuning
-parser.add_argument('--batch_size', type=int, default=400, metavar='N',
+parser.add_argument('--batch_size', type=int, default=300, metavar='N',
                     help='batch size (default: 400)')
 parser.add_argument('--clip', type=float, default=0.8,
                     help='gradient clip value (default: 0.8)')
-parser.add_argument('--lr', type=float, default=1e-6,
+parser.add_argument('--lr', type=float, default=1e-7,
                     help='initial learning rate (default: 1e-3)')
 parser.add_argument('--optim', type=str, default='Adam',
                     help='optimizer to use (default: Adam)')
 parser.add_argument('--num_epochs', type=int, default=10,
                     help='number of epochs (default: 10)')
-parser.add_argument('--when', type=int, default=20,
+parser.add_argument('--when', type=int, default=5,
                     help='when to decay learning rate (default: 20)')
 parser.add_argument('--batch_chunk', type=int, default=50,
                     help='number of chunks per batch (default: 1)')
 parser.add_argument('--reg_par', type=float, default=1e-8,
                     help='the regularization parameter of the network')
 # Logistics
-parser.add_argument('--log_interval', type=int, default=30,
+parser.add_argument('--log_interval', type=int, default=10,
                     help='frequency of result logging (default: 30)')
 parser.add_argument('--seed', type=int, default=1111,
                     help='random seed')
@@ -132,8 +134,8 @@ print('Finish loading the data....')
 ####################################################################
 
 hyp_params = args
-hyp_params.orig_d_l, hyp_params.orig_d_a, hyp_params.orig_d_v = train_data.get_dim()
-hyp_params.l_len, hyp_params.a_len, hyp_params.v_len = train_data.get_seq_len()
+hyp_params.orig_d_1, hyp_params.orig_d_2 = train_data.get_dim()
+hyp_params.d_1_len, hyp_params.d_2_len = train_data.get_seq_len()
 hyp_params.layers = args.nlevels
 hyp_params.use_cuda = use_cuda
 hyp_params.dataset = dataset
@@ -146,6 +148,7 @@ hyp_params.output_dim = output_dim_dict.get(dataset, 1)
 hyp_params.device = 'cuda' if use_cuda else 'cpu'
 
 
+
 if __name__ == '__main__':
     ############
     # the size of the new space learned by the model (number of the new features)
@@ -153,8 +156,8 @@ if __name__ == '__main__':
     outdim_size2 = 10
 
     # size of the input for view 1 and view 2
-    input_shape1 = 300
-    input_shape2 = 74
+    input_shape1 = hyp_params.orig_d_1
+    input_shape2 = hyp_params.orig_d_2
 
     # number of layers with nodes in each one
     layer_size = [512]* (hyp_params.layers-1)
