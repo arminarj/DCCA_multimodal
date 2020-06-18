@@ -74,9 +74,9 @@ class cca_loss():
 
         if self.use_all_singular_values:
             # all singular values are used to calculate the correlation
-            tmp = torch.trace(torch.matmul(Tval.t(), Tval))
-            # print(tmp)
-            corr = torch.sqrt(tmp)
+            tmp = torch.diag(torch.matmul(Tval.t(), Tval))
+            tmp = torch.where(tmp>eps, tmp, torch.ones(tmp.shape).double()*eps) 
+            corr = torch.sum(torch.sqrt(tmp))
             assert torch.isnan(corr).item() == 0
         else:
             # just the top self.top_k singular values are used
